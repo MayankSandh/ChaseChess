@@ -1,5 +1,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Square(pub u8);
+use crate::Board;
 
 impl Square {
     pub fn new(file: u8, rank: u8) -> Self {
@@ -96,9 +97,16 @@ pub enum GameStatus {
 pub struct GameMove {
     pub mv: Move,
     pub captured_piece: Piece,
-    pub promotion: Option<u8>, // For pawn promotion
+    pub promotion: Option<u8>,
     pub is_castling: bool,
     pub is_en_passant: bool,
+    
+    // Add these fields for undo functionality:
+    pub previous_castling_rights: u8,
+    pub previous_en_passant_target: Option<Square>,
+    pub previous_en_passant_pawn: Option<Square>,
+    pub previous_half_move_clock: u16,
+    pub previous_full_move_number: u16,
 }
 
 impl GameMove {
@@ -109,17 +117,39 @@ impl GameMove {
             promotion: None,
             is_castling: false,
             is_en_passant: false,
+            previous_castling_rights: 0,
+            previous_en_passant_target: None,
+            previous_en_passant_pawn: None,
+            previous_half_move_clock: 0,
+            previous_full_move_number: 0,
         }
     }
     
     pub fn with_capture(mv: Move, captured: Piece) -> Self {
+        let mut game_move = Self::new(mv);
+        game_move.captured_piece = captured;
+        game_move
+    }
+
+    pub fn new_with_state(mv: Move, board: &Board) -> Self {
         Self {
             mv,
-            captured_piece: captured,
+            captured_piece: EMPTY,
             promotion: None,
             is_castling: false,
             is_en_passant: false,
+            previous_castling_rights: board.castling_rights,
+            previous_en_passant_target: board.en_passant_target,
+            previous_en_passant_pawn: board.en_passant_pawn,
+            previous_half_move_clock: board.half_move_clock,
+            previous_full_move_number: board.full_move_number,
         }
+    }
+
+    pub fn with_capture_and_state(mv: Move, captured: Piece, board: &Board) -> Self {
+        let mut game_move = Self::new_with_state(mv, board);
+        game_move.captured_piece = captured;
+        game_move
     }
 }
 

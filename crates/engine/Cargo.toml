@@ -3,4 +3,8 @@ name = "engine"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "perft_test"
+path = "src/bin/perft_test.rs"
+
 [dependencies]

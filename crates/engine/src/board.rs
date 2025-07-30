@@ -1198,11 +1198,9 @@ impl Board {
     fn is_double_pawn_push(&self, mv: Move) -> bool {
         let moving_piece = self.get_piece(mv.to);
         
-        println!("Checking double pawn push for piece: {:?}", piece_type(moving_piece));
         
         // Must be a pawn
         if piece_type(moving_piece) != PAWN {
-            println!("❌ Not a pawn");
             return false;
         }
         
@@ -1212,19 +1210,15 @@ impl Board {
         
         // Must move exactly 2 squares
         let rank_diff = (to_rank as i8 - from_rank as i8).abs();
-        println!("Rank diff: {} (from {} to {})", rank_diff, from_rank, to_rank);
         
         if rank_diff != 2 {
-            println!("❌ Not 2 squares");
             return false;
         }
         
         // Must be from starting position
         let starting_rank = if color == WHITE { 1 } else { 6 };
-        println!("Starting rank: {}, actual from rank: {}", starting_rank, from_rank);
         
         if from_rank != starting_rank {
-            println!("❌ Not from starting position");
             return false;
         }
         
@@ -1232,19 +1226,14 @@ impl Board {
         let expected_direction = if color == WHITE { 1 } else { -1 };
         let actual_direction = to_rank as i8 - from_rank as i8;
         
-        println!("Expected direction: {}, actual: {}", expected_direction, actual_direction);
         
         let result = actual_direction == expected_direction * 2;
-        if result {
-            println!("✅ Valid double pawn push!");
-        }
         
         result
     }
     
     /// Set up en passant target after a double pawn push
     fn setup_en_passant(&mut self, mv: Move) {
-        println!("setup_en_passant called for move: {:?} to {:?}", mv.from, mv.to);
         
         if self.is_double_pawn_push(mv) {
             let moving_piece = self.get_piece(mv.to);
@@ -1260,13 +1249,10 @@ impl Board {
             self.en_passant_target = Some(Square::new(mv.from.file(), target_rank));
             self.en_passant_pawn = Some(mv.to); // The pawn that can be captured
             
-            println!("✅ En passant target set: {:?}", self.en_passant_target);
-            println!("✅ En passant pawn at: {:?}", self.en_passant_pawn);
         } else {
             // Clear en passant if not a double pawn push
             self.en_passant_target = None;
             self.en_passant_pawn = None;
-            println!("❌ En passant cleared (not a double pawn push)");
         }
     }
     

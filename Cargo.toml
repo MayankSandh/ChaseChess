@@ -1,0 +1,7 @@
+[workspace]
+members = ["crates/ui", "crates/engine"]
+resolver = "2"
+
+[workspace.dependencies]
+egui = "0.28"
+eframe = "0.28"

@@ -1,4 +1,4 @@
-use egui::{Color32, Rect, Sense, Vec2}; // Removed unused Pos2
+use egui::{Color32, Rect, Sense, Vec2}; 
 use engine::{Board, Move, Square, piece_type, piece_color, is_empty}; // Removed unused is_white, is_black
 use engine::{PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, WHITE, BLACK};
 
@@ -64,9 +64,10 @@ impl ChessApp {
             } else if self.legal_moves.contains(&clicked_square) {
                 // Make move
                 let mv = Move::new(selected, clicked_square);
-                self.board.make_move(mv);
-                self.selected_square = None;
-                self.legal_moves.clear();
+                if self.board.try_make_move(mv).is_ok() {
+                    self.selected_square = None;
+                    self.legal_moves.clear();
+                } // If invalid, do nothing (can add error handling here later)
             } else if !is_empty(self.board.get_piece(clicked_square)) {
                 // Select new piece
                 self.selected_square = Some(clicked_square);

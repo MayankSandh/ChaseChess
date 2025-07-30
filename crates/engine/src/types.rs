@@ -81,3 +81,54 @@ impl Move {
         Self { from, to }
     }
 }
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameStatus {
+    InProgress,
+    Check(u8), // Which color is in check
+    Checkmate(u8), // Which color is checkmated (other color wins)
+    Stalemate,
+    Draw,
+}
+
+#[derive(Debug, Clone)]
+pub struct GameMove {
+    pub mv: Move,
+    pub captured_piece: Piece,
+    pub promotion: Option<u8>, // For pawn promotion
+    pub is_castling: bool,
+    pub is_en_passant: bool,
+}
+
+impl GameMove {
+    pub fn new(mv: Move) -> Self {
+        Self {
+            mv,
+            captured_piece: EMPTY,
+            promotion: None,
+            is_castling: false,
+            is_en_passant: false,
+        }
+    }
+    
+    pub fn with_capture(mv: Move, captured: Piece) -> Self {
+        Self {
+            mv,
+            captured_piece: captured,
+            promotion: None,
+            is_castling: false,
+            is_en_passant: false,
+        }
+    }
+}
+
+// Helper function to get opposite color
+pub fn opposite_color(color: u8) -> u8 {
+    if color == WHITE { BLACK } else { WHITE }
+}
+
+// Helper function to check if piece belongs to current player
+pub fn is_piece_color(piece: Piece, color: u8) -> bool {
+    !is_empty(piece) && piece_color(piece) == color
+}

@@ -125,10 +125,35 @@ impl GameMove {
 
 // Helper function to get opposite color
 pub fn opposite_color(color: u8) -> u8 {
-    if color == WHITE { BLACK } else { WHITE }
+    color ^ WHITE
 }
 
 // Helper function to check if piece belongs to current player
 pub fn is_piece_color(piece: Piece, color: u8) -> bool {
     !is_empty(piece) && piece_color(piece) == color
+}
+
+// Add these castling constants to the existing file
+// Castling rights bitfield constants
+pub const WHITE_KINGSIDE: u8 = 0b0001;
+pub const WHITE_QUEENSIDE: u8 = 0b0010;
+pub const BLACK_KINGSIDE: u8 = 0b0100;
+pub const BLACK_QUEENSIDE: u8 = 0b1000;
+pub const ALL_CASTLING_RIGHTS: u8 = 0b1111;
+
+// Helper functions for castling rights
+pub fn has_castling_right(castling_rights: u8, right: u8) -> bool {
+    castling_rights & right != 0
+}
+
+pub fn remove_castling_right(castling_rights: &mut u8, right: u8) {
+    *castling_rights &= !right;
+}
+
+pub fn get_castling_rights_for_color(castling_rights: u8, color: u8) -> u8 {
+    if color == WHITE {
+        castling_rights & (WHITE_KINGSIDE | WHITE_QUEENSIDE)
+    } else {
+        castling_rights & (BLACK_KINGSIDE | BLACK_QUEENSIDE)
+    }
 }

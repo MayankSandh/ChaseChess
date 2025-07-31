@@ -114,7 +114,7 @@ pub const PERFT_POSITIONS: &[PerftTestCase] = &[
     },
 ];
 
-/// Main perft function - counts all legal moves to a given depth
+/// Fixed perft function using clone strategy (like debug function)
 pub fn perft(board: &mut Board, depth: u32) -> u64 {
     if depth == 0 {
         return 1;
@@ -124,14 +124,16 @@ pub fn perft(board: &mut Board, depth: u32) -> u64 {
     let moves = board.get_all_legal_moves();
     
     for mv in moves {
-        if let Ok(_) = board.try_make_move(mv) {
-            nodes += perft(board, depth - 1);
-            board.undo_move().expect("Failed to undo move");
+        let mut test_board = board.clone();  // ✅ Use clone instead of undo
+        if let Ok(_) = test_board.try_make_move(mv) {
+            nodes += perft(&mut test_board, depth - 1);
+            // No undo needed - test_board is discarded
         }
     }
     
     nodes
 }
+
 
 /// Detailed perft that tracks different move types
 pub fn perft_detailed(board: &mut Board, depth: u32) -> PerftResult {

@@ -166,7 +166,7 @@ impl Board {
         }
     }
 
-    /// Generate pawn moves (for non-pinned pawns)
+    /// Generate pawn moves 
     pub fn get_pawn_moves(&self, square: Square, color: u8) -> Vec<Square> {
         let mut moves = Vec::new();
         let file = square.file();
@@ -217,7 +217,7 @@ impl Board {
             }
         }
         
-        // En passant captures
+        // ENHANCED EN PASSANT VALIDATION
         if let Some(en_passant_square) = self.en_passant_target {
             let en_passant_rank = en_passant_square.rank() as i8;
             let en_passant_file = en_passant_square.file() as i8;
@@ -226,18 +226,28 @@ impl Board {
             for df in [-1, 1] {
                 let pawn_file = file as i8;
                 if pawn_file + df == en_passant_file && (rank as i8 + direction) == en_passant_rank {
-                    // Validate en passant requirements
+                    // ENHANCED VALIDATION:
                     
-                    // Check if we're on the correct rank for en passant
+                    // 1. Check if we're on the correct rank for en passant
                     let correct_rank = if color == WHITE { 4 } else { 3 }; // 5th rank for White, 4th for Black
                     if rank != correct_rank {
                         continue;
                     }
                     
-                    // Check if there's actually an enemy pawn to capture
+                    // 2. Check if there's actually an enemy pawn to capture
                     let enemy_pawn_square = Square::new(en_passant_file as u8, rank);
                     let enemy_piece = self.get_piece(enemy_pawn_square);
-                    if is_empty(enemy_piece) || piece_type(enemy_piece) != PAWN || piece_color(enemy_piece) == color {
+                    
+                    // 3. CRITICAL: Validate enemy pawn exists and is correct color/type
+                    if is_empty(enemy_piece) || 
+                    piece_type(enemy_piece) != PAWN || 
+                    piece_color(enemy_piece) == color {
+                        continue;
+                    }
+                    
+                    // 4. ADDITIONAL: Validate en passant square is empty
+                    let en_passant_piece = self.get_piece(en_passant_square);
+                    if !is_empty(en_passant_piece) {
                         continue;
                     }
                     
@@ -248,10 +258,6 @@ impl Board {
         
         moves
     }
-
-
-
-    
 
     /// Generate knight moves
     fn get_knight_moves(&self, square: Square) -> Vec<Square> {
@@ -448,7 +454,7 @@ impl Board {
         moves
     }
 
-    /// Generate moves for a pinned pawn (fixed version)
+    /// Generate moves for a pinned pawn 
     fn get_pinned_pawn_moves(&self, square: Square, pin_direction: (i8, i8), color: u8) -> Vec<Square> {
         let mut moves = Vec::new();
         let file = square.file();
@@ -493,7 +499,7 @@ impl Board {
                 }
             }
         }
-        // Case 2: Diagonally pinned (existing logic)
+        // Case 2: Diagonally pinned
         else if pin_direction.0.abs() == pin_direction.1.abs() && pin_direction.0 != 0 {
             // Check BOTH directions along the pin line
             for direction_multiplier in [-1, 1] {
@@ -518,8 +524,43 @@ impl Board {
                 }
             }
             
-            // En passant along pin line (existing logic)
-            // ... keep your existing en passant code ...
+            // ENHANCED EN PASSANT VALIDATION FOR PINNED PAWNS
+            if let Some(en_passant_square) = self.en_passant_target {
+                // Check if en passant target is along the pin line
+                for direction_multiplier in [-1, 1] {
+                    let new_file = file as i8 + (pin_direction.0 * direction_multiplier);
+                    let new_rank = rank as i8 + (pin_direction.1 * direction_multiplier);
+                    
+                    if en_passant_square.file() as i8 == new_file && en_passant_square.rank() as i8 == new_rank {
+                        // SAME ENHANCED VALIDATION AS REGULAR PAWN MOVES:
+                        let correct_rank = if color == WHITE { 4 } else { 3 };
+                        if rank != correct_rank {
+                            continue;
+                        }
+                        
+                        let enemy_pawn_square = Square::new(en_passant_square.file(), rank);
+                        let enemy_piece = self.get_piece(enemy_pawn_square);
+                        
+                        if is_empty(enemy_piece) || 
+                        piece_type(enemy_piece) != PAWN || 
+                        piece_color(enemy_piece) == color {
+                            continue;
+                        }
+                        
+                        let en_passant_piece = self.get_piece(en_passant_square);
+                        if !is_empty(en_passant_piece) {
+                            continue;
+                        }
+                        
+                        // Ensure en passant is in forward direction
+                        let rank_diff = new_rank - rank as i8;
+                        let expected_direction = if color == WHITE { 1 } else { -1 };
+                        if rank_diff == expected_direction {
+                            moves.push(en_passant_square);
+                        }
+                    }
+                }
+            }
         }
         // Case 3: Other pin directions (horizontal, etc.)
         else {
@@ -528,6 +569,7 @@ impl Board {
         
         moves
     }
+
 
 
 

@@ -7,7 +7,7 @@ impl Board {
         if !self.is_valid_move(mv) {
             return Err("Invalid move".to_string());
         }
-
+    
         match self.game_status {
             GameStatus::InProgress | GameStatus::Check(_) => {
                 // Game can continue
@@ -16,30 +16,33 @@ impl Board {
                 return Err("Game is over".to_string());
             }
         }
-
+    
         let captured_piece = self.get_piece(mv.to);
         let moving_piece = self.get_piece(mv.from);
-        
-        // Check for special moves
+    
+        // CHECK FOR SPECIAL MOVES FIRST (before clearing en passant)
         let is_castling = self.is_castling_move(mv).is_some();
-        let is_en_passant = self.is_en_passant_move(mv);
-        
-        // Create game move record WITH STATE CAPTURE
+        let is_en_passant = self.is_en_passant_move(mv);  // ← Now works with existing target
+    
+        // THEN clear en passant target for next move
+        let old_en_passant = self.en_passant_target;
+        self.en_passant_target = None;
+        self.en_passant_pawn = None;
+    
+        // Rest of your function stays the same...
         let mut game_move = if is_en_passant {
-            let captured_pawn = self.get_piece(self.en_passant_pawn.unwrap());
+            let captured_pawn = self.get_piece(self.en_passant_pawn.unwrap_or(mv.to));
             GameMove::with_capture_and_state(mv, captured_pawn, self)
         } else if is_empty(captured_piece) {
             GameMove::new_with_state(mv, self)
         } else {
             GameMove::with_capture_and_state(mv, captured_piece, self)
         };
-        
+    
         game_move.is_castling = is_castling;
         game_move.is_en_passant = is_en_passant;
-        
-        // Copy promotion info from Move to GameMove
         game_move.promotion = mv.promotion;
-        
+    
         // Execute the move
         if is_castling {
             let kingside = self.is_castling_move(mv).unwrap();
@@ -47,7 +50,6 @@ impl Board {
         } else if is_en_passant {
             self.execute_en_passant(mv);
         } else {
-            // Handle promotion in move execution
             if mv.is_promotion() {
                 let promoted_piece = make_piece(mv.promotion.unwrap(), piece_color(moving_piece));
                 self.set_piece(mv.to, promoted_piece);
@@ -57,27 +59,29 @@ impl Board {
             self.set_piece(mv.from, EMPTY);
             self.update_castling_rights(mv);
         }
-
+    
+        // NEW EN PASSANT LOGIC: Only set if current move is double pawn push
         if !is_castling && !is_en_passant {
-            self.setup_en_passant(mv);
+            self.setup_en_passant_fixed(mv);
         }
-
+    
         self.move_history.push(game_move.clone());
         self.current_turn = opposite_color(self.current_turn);
-
+    
         if piece_type(moving_piece) == PAWN || !is_empty(captured_piece) || is_en_passant {
             self.half_move_clock = 0;
         } else {
             self.half_move_clock += 1;
         }
-
+    
         if self.current_turn == WHITE {
             self.full_move_number += 1;
         }
-
+    
         self.update_game_status();
         Ok(game_move)
     }
+    
 
 
     /// Undo the last move made
@@ -344,27 +348,33 @@ impl Board {
         }
     }
 
-    /// Set up en passant target after a double pawn push
-    pub fn setup_en_passant(&mut self, mv: Move) {
-        if self.is_double_pawn_push(mv) {
-            let moving_piece = self.get_piece(mv.to);
-            let color = piece_color(moving_piece);
-
-            // Calculate the square the pawn "jumped over"
-            let target_rank = if color == WHITE {
-                mv.from.rank() + 1 // Square between starting and ending position
-            } else {
-                mv.from.rank() - 1
-            };
-
-            self.en_passant_target = Some(Square::new(mv.from.file(), target_rank));
-            self.en_passant_pawn = Some(mv.to); // The pawn that can be captured
-        } else {
-            // Clear en passant if not a double pawn push
-            self.en_passant_target = None;
-            self.en_passant_pawn = None;
+    /// Set up en passant target after a double pawn push 
+    pub fn setup_en_passant_fixed(&mut self, mv: Move) {
+        let moving_piece = self.get_piece(mv.to);
+        
+        // Must be a pawn
+        if piece_type(moving_piece) != PAWN {
+            return;
         }
+        
+        let from_rank = mv.from.rank();
+        let to_rank = mv.to.rank();
+        let color = piece_color(moving_piece);
+        
+        // Check if this is a double pawn push
+        let rank_diff = (to_rank as i8 - from_rank as i8).abs();
+        if rank_diff == 2 {
+            let starting_rank = if color == WHITE { 1 } else { 6 };
+            if from_rank == starting_rank {
+                // Set en passant target square (the square the pawn "jumped over")
+                let en_passant_rank = if color == WHITE { 2 } else { 5 };
+                self.en_passant_target = Some(Square::new(mv.from.file(), en_passant_rank));
+                self.en_passant_pawn = Some(mv.to); // The pawn that can be captured
+            }
+        }
+        // If not a double pawn push, en passant stays cleared (already cleared above)
     }
+
 
     /// Check if a move is a double pawn push that enables en passant
     fn is_double_pawn_push(&self, mv: Move) -> bool {
@@ -398,52 +408,79 @@ impl Board {
     }
 
     /// Check if a move is an en passant capture
+    /// Check if a move is an en passant capture
     pub fn is_en_passant_move(&self, mv: Move) -> bool {
+        
         // Must be a pawn move
         let moving_piece = self.get_piece(mv.from);
+        
         if piece_type(moving_piece) != PAWN {
             return false;
         }
 
         // Must have an en passant target
         let target = match self.en_passant_target {
-            Some(square) => square,
-            None => return false,
+            Some(square) => {
+                square
+            },
+            None => {
+                return false;
+            }
         };
 
-        // Must be moving to the en passant target square
+        
         if mv.to != target {
             return false;
         }
 
         // Target square must be empty (pawn moves diagonally to empty square)
-        if !is_empty(self.get_piece(mv.to)) {
+        let target_piece = self.get_piece(mv.to);
+        
+        if !is_empty(target_piece) {
             return false;
         }
 
         // Must be a diagonal move
         let file_diff = (mv.to.file() as i8 - mv.from.file() as i8).abs();
         let rank_diff = (mv.to.rank() as i8 - mv.from.rank() as i8).abs();
-
-        file_diff == 1 && rank_diff == 1
+        
+        if !(file_diff == 1 && rank_diff == 1) {
+            return false;
+        }
+        
+        true
     }
 
+
     /// Execute an en passant capture
-    pub fn execute_en_passant(&mut self, mv: Move) {
-        let capturing_pawn = self.get_piece(mv.from);
-        let captured_pawn_square = self.en_passant_pawn.unwrap();
-
-        // Move the capturing pawn
-        self.set_piece(mv.to, capturing_pawn);
+    fn execute_en_passant(&mut self, mv: Move) {
+        let moving_piece = self.get_piece(mv.from);
+        let moving_color = piece_color(moving_piece);
+        
+        // Move the capturing pawn to the target square
+        self.set_piece(mv.to, moving_piece);
         self.set_piece(mv.from, EMPTY);
-
-        // Remove the captured pawn
+        
+        // CRITICAL FIX: Remove the captured pawn from its original square
+        let captured_pawn_square = if moving_color == WHITE {
+            Square::new(mv.to.file(), mv.to.rank() - 1) // Remove Black pawn below
+        } else {
+            Square::new(mv.to.file(), mv.to.rank() + 1) // Remove White pawn above
+        };
+        
+        // ← THIS IS THE KEY LINE THAT REMOVES THE CAPTURED PAWN
         self.set_piece(captured_pawn_square, EMPTY);
-
+        
         // Clear en passant state
         self.en_passant_target = None;
         self.en_passant_pawn = None;
+        
+        // Update castling rights if needed
+        self.update_castling_rights(mv);
     }
+
+    
+    
 
     /// Undo an en passant capture
     fn undo_en_passant(&mut self, game_move: &GameMove) {

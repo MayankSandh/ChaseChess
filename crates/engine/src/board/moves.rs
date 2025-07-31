@@ -68,17 +68,11 @@ impl Board {
                 // Not in check, but still need to validate king moves
                 let piece = self.get_piece(square);
                 if piece_type(piece) == KING {
-                    // ONLY FOR KING MOVES: Temporarily ignore king position
                     *self.ignore_square_for_threats.borrow_mut() = Some(square);
-                    
                     let filtered_moves = self.filter_king_moves_in_check(pseudo_moves, opponent_color);
-                    
-                    // Restore king immediately after king move validation
                     *self.ignore_square_for_threats.borrow_mut() = None;
-                    
                     filtered_moves
                 } else {
-                    // Non-king pieces: NO king ignoring - preserves pin detection
                     pseudo_moves
                 }
             }
@@ -86,23 +80,32 @@ impl Board {
                 // Single check - can block or capture
                 let checking_piece_square = checking_pieces[0];
                 let blocking_squares = self.get_blocking_squares(king_square, checking_piece_square);
-                
                 let piece = self.get_piece(square);
+                
                 if piece_type(piece) == KING {
-                    // ONLY FOR KING MOVES: Temporarily ignore king position
                     *self.ignore_square_for_threats.borrow_mut() = Some(square);
-                    
                     let filtered_moves = self.filter_king_moves_in_check(pseudo_moves, opponent_color);
-                    
-                    // Restore king immediately after king move validation
                     *self.ignore_square_for_threats.borrow_mut() = None;
-                    
                     filtered_moves
                 } else {
-                    // For other pieces, only moves that block or capture are legal
-                    // NO king ignoring - preserves pin detection
+                    // ✅ FIX: Handle en passant moves specially during check resolution
                     pseudo_moves.into_iter()
-                        .filter(|&mv| blocking_squares.contains(&mv))
+                        .filter(|&mv| {
+                            // Normal case: move blocks or captures checking piece
+                            if blocking_squares.contains(&mv) {
+                                return true;
+                            }
+                            
+                            // ✅ SPECIAL CASE: En passant that removes the checking piece
+                            if self.is_en_passant_move(Move::new(square, mv)) {
+                                // Check if this en passant removes the checking piece
+                                if let Some(en_passant_pawn_square) = self.en_passant_pawn {
+                                    return en_passant_pawn_square == checking_piece_square;
+                                }
+                            }
+                            
+                            false
+                        })
                         .collect()
                 }
             }
@@ -110,22 +113,17 @@ impl Board {
                 // Double check - only king moves are legal
                 let piece = self.get_piece(square);
                 if piece_type(piece) == KING {
-                    // ONLY FOR KING MOVES: Temporarily ignore king position
                     *self.ignore_square_for_threats.borrow_mut() = Some(square);
-                    
                     let filtered_moves = self.filter_king_moves_in_check(pseudo_moves, opponent_color);
-                    
-                    // Restore king immediately after king move validation
                     *self.ignore_square_for_threats.borrow_mut() = None;
-                    
                     filtered_moves
                 } else {
-                    Vec::new() // No legal moves for non-king pieces
+                    Vec::new()
                 }
             }
         }
-        
     }
+    
 
     /// Get pseudo-legal moves (before checking for check/pins)
     pub fn get_pseudo_legal_moves(&self, square: Square) -> Vec<Square> {

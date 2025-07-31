@@ -1,7 +1,6 @@
 [workspace]
-members = ["crates/ui", "crates/engine"]
+members = ["crates/ui", "crates/engine", "crates/ai"]
 resolver = "2"
-default-run = "ui"  # or "perft_test"
 
 [workspace.dependencies]
 egui = "0.28"

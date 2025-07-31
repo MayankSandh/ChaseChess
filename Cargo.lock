@@ -118,6 +118,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ai"
+version = "0.1.0"
+dependencies = [
+ "engine",
+]
+
+[[package]]
 name = "android-activity"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2995,6 +3002,7 @@ dependencies = [
 name = "ui"
 version = "0.1.0"
 dependencies = [
+ "ai",
  "eframe",
  "egui",
  "engine",

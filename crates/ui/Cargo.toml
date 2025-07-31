@@ -7,3 +7,4 @@ edition = "2021"
 egui = "0.28"
 eframe = "0.28"
 engine = { path = "../engine" }
+ai = { path = "../ai" }

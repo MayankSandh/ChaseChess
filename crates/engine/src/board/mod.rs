@@ -247,6 +247,18 @@ impl Board {
         false
     }
 
+    /// Check if the current player is in check
+    pub fn is_in_check(&self) -> bool {
+        let king_square = match self.find_king(self.current_turn) {
+            Some(square) => square,
+            None => return false,
+        };
+        
+        let opponent_color = opposite_color(self.current_turn);
+        let checking_pieces = self.find_checking_pieces(king_square, opponent_color);
+        !checking_pieces.is_empty()
+    }    
+
 }
 
 impl Default for Board {

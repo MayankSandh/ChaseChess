@@ -75,11 +75,20 @@ pub fn is_empty(piece: Piece) -> bool {
 pub struct Move {
     pub from: Square,
     pub to: Square,
+    pub promotion: Option<u8>, // Add this field
 }
 
 impl Move {
     pub fn new(from: Square, to: Square) -> Self {
-        Self { from, to }
+        Self { from, to, promotion: None }
+    }
+    
+    pub fn new_promotion(from: Square, to: Square, promotion_piece: u8) -> Self {
+        Self { from, to, promotion: Some(promotion_piece) }
+    }
+    
+    pub fn is_promotion(&self) -> bool {
+        self.promotion.is_some()
     }
 }
 
@@ -185,5 +194,17 @@ pub fn get_castling_rights_for_color(castling_rights: u8, color: u8) -> u8 {
         castling_rights & (WHITE_KINGSIDE | WHITE_QUEENSIDE)
     } else {
         castling_rights & (BLACK_KINGSIDE | BLACK_QUEENSIDE)
+    }
+}
+
+pub fn piece_type_name(piece_type: u8) -> &'static str {
+    match piece_type {
+        PAWN => "Pawn",
+        ROOK => "Rook", 
+        KNIGHT => "Knight",
+        BISHOP => "Bishop",
+        QUEEN => "Queen",
+        KING => "King",
+        _ => "Unknown"
     }
 }

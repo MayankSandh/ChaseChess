@@ -1,4 +1,4 @@
-use crate::{Board, Move,Square};
+use crate::{Board, Move, Square, square_to_algebraic};
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
@@ -500,10 +500,197 @@ pub fn debug_king_move_validation_detailed() {
     }
 }
 
-
-// Helper function that should be outside impl blocks
-fn square_to_algebraic(square: Square) -> String {
-    let file = (b'a' + square.file()) as char;
-    let rank = (b'1' + square.rank()) as char;
-    format!("{}{}", file, rank)
+/// Debug position 3 with a5a6 move in Stockfish format
+pub fn debug_position3_a5a6_stockfish() {
+    let board = Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap();
+    
+    println!("Your Engine Output for position after Position 3 + a5a6:");
+    let debug_info = board.debug_position_stockfish_format(&["a5a6"], 3);
+    for info in debug_info {
+        println!("{}", info);
+    }
 }
+
+/// Debug the h4g4 position specifically
+pub fn debug_h4g4_position() {
+    let board = Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap();
+    
+    println!("Your Engine Output for position after a5a6 h4g4:");
+    let debug_info = board.debug_position_stockfish_format(&["a5a6", "h4g4"], 2);
+    for info in debug_info {
+        println!("{}", info);
+    }
+}
+
+/// Debug Position 5 missing moves
+pub fn debug_position5_missing_moves() {
+    let board = Board::new();
+    
+    println!("\n🔍 Debugging Position 5 Missing Moves:");
+    let debug_info = board.debug_position5_missing_moves();
+    for info in debug_info {
+        println!("{}", info);
+    }
+}
+
+/// Debug Position 4 analysis
+pub fn debug_position4_analysis() {
+    let board = Board::from_fen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1").unwrap();
+    
+    println!("Your Engine Output for Position 4:");
+    let debug_info = board.debug_position_stockfish_format(&[], 2);
+    for info in debug_info {
+        println!("{}", info);
+    }
+}
+
+/// Debug Kiwipete analysis
+pub fn debug_kiwipete_analysis() {
+    let board = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1").unwrap();
+    
+    println!("Your Engine Output for Kiwipete:");
+    let debug_info = board.debug_position_stockfish_format(&[], 3);
+    for info in debug_info {
+        println!("{}", info);
+    }
+}
+
+/// Debug the specific b4f4 move that has +1 extra node
+pub fn debug_b4f4_discrepancy() {
+    let board = Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap();
+    
+    println!("Debugging b4f4 move discrepancy:");
+    println!("Your Engine vs Stockfish: b4f4 should have 3 nodes, you have 4");
+    
+    // Drill down into b4f4 specifically
+    let debug_info = board.debug_position_stockfish_format(&["a5a6", "h4g4", "b4f4"], 1);
+    for info in debug_info {
+        println!("{}", info);
+    }
+}
+
+/// Debug Position 5 missing moves (most important - only depth 1)
+pub fn debug_position5_targeted() {
+    let board = Board::from_fen("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8").unwrap();
+    
+    println!("Position 5 Analysis - Missing 3 moves:");
+    println!("Your Engine: 41 moves, Stockfish: 44 moves");
+    
+    let debug_info = board.debug_position_stockfish_format(&[], 1);
+    for info in debug_info {
+        println!("{}", info);
+    }
+}
+
+/// Debug Position 4 missing moves 
+pub fn debug_position4_targeted() {
+    let board = Board::from_fen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1").unwrap();
+    
+    println!("Position 4 Analysis - Missing 36 moves:");
+    println!("Your Engine: 228 moves, Stockfish: 264 moves");
+    
+    let debug_info = board.debug_position_stockfish_format(&[], 2);
+    for info in debug_info {
+        println!("{}", info);
+    }
+}
+
+/// Target the exact position causing +1 node in Position 3
+pub fn debug_position3_exact_bug() {
+    println!("=== EXACT BUG LOCATION ===");
+    println!("Position: 8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1 moves a5a6 h4g4 b4f4");
+    println!("Your Engine generates 4 moves, Stockfish generates 3 moves");
+    println!("This +1 extra move is the source of your +30 node discrepancy at depth 4");
+    
+    debug_b4f4_discrepancy();
+}
+
+/// Debug threat detection for the h4 square issue
+pub fn debug_threat_detection() {
+    let board = Board::new();
+    
+    println!("\n🔍 Debugging Threat Detection for h4 Square:");
+    let debug_info = board.debug_threat_detection();
+    for info in debug_info {
+        println!("{}", info);
+    }
+}
+
+/// Debug board state verification
+pub fn debug_board_state_verification() {
+    let board = Board::new();
+    
+    println!("🔍 Board State Verification:");
+    let debug_info = board.debug_board_state_f4_position();
+    for info in debug_info {
+        println!("{}", info);
+    }
+}
+
+/// Test promotion move undo functionality
+pub fn test_promotion_undo_cycles() {
+    let mut board = Board::from_fen("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8").unwrap();
+    
+    println!("Testing promotion undo cycles...");
+    
+    // Get all moves
+    let moves = board.get_all_legal_moves();
+    let initial_move_count = moves.len();
+    println!("Initial moves: {}", initial_move_count);
+    
+    // Test promotion moves specifically
+    for mv in moves {
+        if mv.is_promotion() {
+            println!("Testing promotion move: {}{} -> {:?}", 
+                     square_to_algebraic(mv.from), 
+                     square_to_algebraic(mv.to), 
+                     mv.promotion);
+            
+            // Make the move
+            if let Ok(_game_move) = board.try_make_move(mv) {
+                let _after_move_count = board.get_all_legal_moves().len();
+                
+                // Undo the move
+                if let Ok(_) = board.undo_move() {
+                    let after_undo_count = board.get_all_legal_moves().len();
+                    
+                    if initial_move_count != after_undo_count {
+                        println!("❌ UNDO BUG: {} != {} for promotion move", 
+                                initial_move_count, after_undo_count);
+                    } else {
+                        println!("✅ Undo working for this promotion");
+                    }
+                } else {
+                    println!("❌ Failed to undo promotion move");
+                }
+            }
+        }
+    }
+}
+
+
+/// Test only Position 4 to verify the fix
+pub fn run_perft_position4_only() {
+    let board = Board::from_fen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1").unwrap();
+    
+    println!("🏁 Testing Position 4 ONLY:");
+    
+    // Test depth 3 where the issue was
+    let start_time = std::time::Instant::now();
+    let mut test_board = board.clone();
+    let nodes = crate::perft::perft(&mut test_board, 3);
+    let duration = start_time.elapsed();
+    
+    println!("Depth 3: {} nodes in {:.3}s", nodes, duration.as_secs_f64());
+    
+    if nodes == 9467 {
+        println!("✅ POSITION 4 FIXED! Node count matches Stockfish.");
+    } else if nodes == 9631 {
+        println!("❌ POSITION 4 STILL BROKEN: Still generating +164 extra nodes.");
+        println!("The fix wasn't applied correctly or there's another issue.");
+    } else {
+        println!("❓ UNEXPECTED RESULT: Got {} nodes (expected 9467)", nodes);
+    }
+}
+
+

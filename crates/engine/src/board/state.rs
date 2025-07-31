@@ -22,14 +22,13 @@ impl Board {
     
         // CHECK FOR SPECIAL MOVES FIRST (before clearing en passant)
         let is_castling = self.is_castling_move(mv).is_some();
-        let is_en_passant = self.is_en_passant_move(mv);  // ← Now works with existing target
+        let is_en_passant = self.is_en_passant_move(mv);
     
         // THEN clear en passant target for next move
         let old_en_passant = self.en_passant_target;
         self.en_passant_target = None;
         self.en_passant_pawn = None;
     
-        // Rest of your function stays the same...
         let mut game_move = if is_en_passant {
             let captured_pawn = self.get_piece(self.en_passant_pawn.unwrap_or(mv.to));
             GameMove::with_capture_and_state(mv, captured_pawn, self)
@@ -42,6 +41,11 @@ impl Board {
         game_move.is_castling = is_castling;
         game_move.is_en_passant = is_en_passant;
         game_move.promotion = mv.promotion;
+    
+        // ✅ FIX: UPDATE CASTLING RIGHTS BEFORE MOVING PIECES
+        if !is_castling && !is_en_passant {
+            self.update_castling_rights_fixed(mv, moving_piece, captured_piece);
+        }
     
         // Execute the move
         if is_castling {
@@ -57,7 +61,7 @@ impl Board {
                 self.set_piece(mv.to, moving_piece);
             }
             self.set_piece(mv.from, EMPTY);
-            self.update_castling_rights(mv);
+            // ✅ Castling rights already updated above
         }
     
         // NEW EN PASSANT LOGIC: Only set if current move is double pawn push
@@ -82,7 +86,44 @@ impl Board {
         Ok(game_move)
     }
     
-
+    
+    pub fn update_castling_rights_fixed(&mut self, mv: Move, moving_piece: Piece, captured_piece: Piece) {
+        let piece_color_val = piece_color(moving_piece);
+    
+        // ✅ FIX: Now we have the actual moving piece!
+        if piece_type(moving_piece) == KING {
+            if piece_color_val == WHITE {
+                remove_castling_right(&mut self.castling_rights, WHITE_KINGSIDE);
+                remove_castling_right(&mut self.castling_rights, WHITE_QUEENSIDE);
+            } else {
+                remove_castling_right(&mut self.castling_rights, BLACK_KINGSIDE);
+                remove_castling_right(&mut self.castling_rights, BLACK_QUEENSIDE);
+            }
+        }
+    
+        // Handle rook moves (from square)
+        if piece_type(moving_piece) == ROOK {
+            match (mv.from.file(), mv.from.rank()) {
+                (0, 0) => remove_castling_right(&mut self.castling_rights, WHITE_QUEENSIDE), // a1
+                (7, 0) => remove_castling_right(&mut self.castling_rights, WHITE_KINGSIDE),  // h1
+                (0, 7) => remove_castling_right(&mut self.castling_rights, BLACK_QUEENSIDE), // a8
+                (7, 7) => remove_castling_right(&mut self.castling_rights, BLACK_KINGSIDE),  // h8
+                _ => {}
+            }
+        }
+    
+        // Handle captured rooks (to square) - ✅ NOW we have the captured piece!
+        if piece_type(captured_piece) == ROOK {
+            match (mv.to.file(), mv.to.rank()) {
+                (0, 0) => remove_castling_right(&mut self.castling_rights, WHITE_QUEENSIDE), // a1
+                (7, 0) => remove_castling_right(&mut self.castling_rights, WHITE_KINGSIDE),  // h1
+                (0, 7) => remove_castling_right(&mut self.castling_rights, BLACK_QUEENSIDE), // a8
+                (7, 7) => remove_castling_right(&mut self.castling_rights, BLACK_KINGSIDE),  // h8
+                _ => {}
+            }
+        }
+    }
+    
 
     /// Undo the last move made
     pub fn undo_move(&mut self) -> Result<GameMove, String> {

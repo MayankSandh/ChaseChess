@@ -208,3 +208,13 @@ pub fn piece_type_name(piece_type: u8) -> &'static str {
         _ => "Unknown"
     }
 }
+
+impl Square {
+    // Add this if it doesn't exist
+    pub fn from_algebraic(algebraic: &str) -> Self {
+        let chars: Vec<char> = algebraic.chars().collect();
+        let file = (chars[0] as u8) - b'a';
+        let rank = (chars[1] as u8) - b'1';
+        Self::new(file, rank)
+    }
+}

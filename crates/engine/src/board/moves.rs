@@ -7,52 +7,44 @@ impl Board {
     /// Generate all legal moves for the current player
     pub fn get_all_legal_moves(&self) -> Vec<Move> {
         let mut all_moves = Vec::new();
-        
+    
         for rank in 0..8 {
             for file in 0..8 {
                 let square = Square::new(file, rank);
                 let piece = self.get_piece(square);
-                
+    
                 if !is_empty(piece) && is_piece_color(piece, self.current_turn) {
                     let piece_moves = self.get_legal_moves(square);
                     let piece_type_val = piece_type(piece);
-                    
+    
                     for target_square in piece_moves {
                         // Check if this is a pawn promotion
                         if piece_type_val == PAWN {
                             let promotion_rank = if piece_color(piece) == WHITE { 7 } else { 0 };
                             if target_square.rank() == promotion_rank {
-                                // Generate 4 promotion moves
+                                // Generate 4 promotion moves - ✅ REMOVE DOUBLE VALIDATION
                                 for &promotion_piece in &[QUEEN, ROOK, BISHOP, KNIGHT] {
                                     let promotion_move = Move::new_promotion(square, target_square, promotion_piece);
-                                    // ADD THIS VALIDATION CHECK:
-                                    if self.is_valid_move(promotion_move) {
-                                        all_moves.push(promotion_move);
-                                    }
+                                    all_moves.push(promotion_move);  // ✅ No extra validation needed
                                 }
                             } else {
                                 // Regular pawn move
                                 let regular_move = Move::new(square, target_square);
-                                // ADD THIS VALIDATION CHECK:
-                                if self.is_valid_move(regular_move) {
-                                    all_moves.push(regular_move);
-                                }
+                                all_moves.push(regular_move);  // ✅ No extra validation needed
                             }
                         } else {
                             // Non-pawn move
                             let regular_move = Move::new(square, target_square);
-                            // ADD THIS VALIDATION CHECK:
-                            if self.is_valid_move(regular_move) {
-                                all_moves.push(regular_move);
-                            }
+                            all_moves.push(regular_move);  // ✅ No extra validation needed
                         }
                     }
                 }
             }
         }
-        
+    
         all_moves
     }
+    
 
 
 
@@ -460,115 +452,87 @@ impl Board {
         let file = square.file();
         let rank = square.rank();
         let direction = if color == WHITE { 1 } else { -1 };
-        
-        // Case 1: Vertically pinned - FIXED VERSION
+    
+        // Case 1: Vertically pinned (along the same file)
         if pin_direction.0 == 0 {
-            // Pawn is pinned vertically (along the same file)
-            // It can move forward OR backward along the pin line
-            
-            // Check both directions along the pin line
-            for pin_multiplier in [-1, 1] {
-                let new_rank = rank as i8 + (pin_direction.1 * pin_multiplier);
+            // Pawn can ONLY move forward along the pin line, NEVER backward
+            let forward_rank = rank as i8 + direction;
+            if forward_rank >= 0 && forward_rank < 8 {
+                let target_square = Square::new(file, forward_rank as u8);
+                let target_piece = self.get_piece(target_square);
                 
-                if new_rank >= 0 && new_rank < 8 {
-                    let target_square = Square::new(file, new_rank as u8);
-                    let target_piece = self.get_piece(target_square);
+                // Only forward moves, only if empty
+                if is_empty(target_piece) {
+                    moves.push(target_square);
                     
-                    // For forward moves (in pawn's natural direction)
-                    let rank_diff = new_rank - rank as i8;
-                    if rank_diff == direction && is_empty(target_piece) {
-                        moves.push(target_square);
-                        
-                        // Check for double move from starting position
-                        let starting_rank = if color == WHITE { 1 } else { 6 };
-                        if rank == starting_rank {
-                            let double_rank = new_rank + direction;
-                            if double_rank >= 0 && double_rank < 8 {
-                                let double_square = Square::new(file, double_rank as u8);
-                                let double_piece = self.get_piece(double_square);
-                                if is_empty(double_piece) {
-                                    moves.push(double_square);
-                                }
+                    // Check double move from starting position
+                    let starting_rank = if color == WHITE { 1 } else { 6 };
+                    if rank == starting_rank {
+                        let double_rank = forward_rank + direction;
+                        if double_rank >= 0 && double_rank < 8 {
+                            let double_square = Square::new(file, double_rank as u8);
+                            if is_empty(self.get_piece(double_square)) {
+                                moves.push(double_square);
                             }
                         }
-                    }
-                    // For backward moves (capturing toward the pinning piece)
-                    else if rank_diff == -direction && !is_empty(target_piece) && piece_color(target_piece) != color {
-                        moves.push(target_square);
                     }
                 }
             }
         }
         // Case 2: Diagonally pinned
         else if pin_direction.0.abs() == pin_direction.1.abs() && pin_direction.0 != 0 {
-            // Check BOTH directions along the pin line
+            // Check if the diagonal move is in the forward direction for the pawn
+            let forward_rank = rank as i8 + direction;
+            
+            // Only check the diagonal that's in the pin direction AND forward for the pawn
             for direction_multiplier in [-1, 1] {
                 let new_file = file as i8 + (pin_direction.0 * direction_multiplier);
                 let new_rank = rank as i8 + (pin_direction.1 * direction_multiplier);
                 
-                if new_file >= 0 && new_file < 8 && new_rank >= 0 && new_rank < 8 {
+                // CRITICAL: Only allow forward moves for pawns
+                if new_rank == forward_rank && new_file >= 0 && new_file < 8 {
                     let target_square = Square::new(new_file as u8, new_rank as u8);
                     let target_piece = self.get_piece(target_square);
                     
-                    // For diagonal moves, pawn can only capture (not move to empty squares)
+                    // Only captures on diagonal
                     if !is_empty(target_piece) && piece_color(target_piece) != color {
-                        // Additional check: ensure this is a valid pawn capture direction
-                        let rank_diff = new_rank - rank as i8;
-                        let expected_direction = if color == WHITE { 1 } else { -1 };
-                        
-                        // Only allow captures in the forward direction for the pawn
-                        if rank_diff == expected_direction {
-                            moves.push(target_square);
-                        }
+                        moves.push(target_square);
                     }
                 }
             }
             
-            // ENHANCED EN PASSANT VALIDATION FOR PINNED PAWNS
+            // Handle en passant for diagonally pinned pawns (same validation as before)
             if let Some(en_passant_square) = self.en_passant_target {
-                // Check if en passant target is along the pin line
-                for direction_multiplier in [-1, 1] {
-                    let new_file = file as i8 + (pin_direction.0 * direction_multiplier);
-                    let new_rank = rank as i8 + (pin_direction.1 * direction_multiplier);
-                    
-                    if en_passant_square.file() as i8 == new_file && en_passant_square.rank() as i8 == new_rank {
-                        // SAME ENHANCED VALIDATION AS REGULAR PAWN MOVES:
-                        let correct_rank = if color == WHITE { 4 } else { 3 };
-                        if rank != correct_rank {
-                            continue;
-                        }
+                let correct_rank = if color == WHITE { 4 } else { 3 };
+                if rank == correct_rank {
+                    for direction_multiplier in [-1, 1] {
+                        let new_file = file as i8 + (pin_direction.0 * direction_multiplier);
+                        let new_rank = rank as i8 + (pin_direction.1 * direction_multiplier);
                         
-                        let enemy_pawn_square = Square::new(en_passant_square.file(), rank);
-                        let enemy_piece = self.get_piece(enemy_pawn_square);
-                        
-                        if is_empty(enemy_piece) || 
-                        piece_type(enemy_piece) != PAWN || 
-                        piece_color(enemy_piece) == color {
-                            continue;
-                        }
-                        
-                        let en_passant_piece = self.get_piece(en_passant_square);
-                        if !is_empty(en_passant_piece) {
-                            continue;
-                        }
-                        
-                        // Ensure en passant is in forward direction
-                        let rank_diff = new_rank - rank as i8;
-                        let expected_direction = if color == WHITE { 1 } else { -1 };
-                        if rank_diff == expected_direction {
-                            moves.push(en_passant_square);
+                        if en_passant_square.file() as i8 == new_file && 
+                           en_passant_square.rank() as i8 == new_rank &&
+                           new_rank == forward_rank { // Must be forward move
+                            
+                            let enemy_pawn_square = Square::new(en_passant_square.file(), rank);
+                            let enemy_piece = self.get_piece(enemy_pawn_square);
+                            
+                            if !is_empty(enemy_piece) &&
+                               piece_type(enemy_piece) == PAWN &&
+                               piece_color(enemy_piece) != color &&
+                               is_empty(self.get_piece(en_passant_square)) {
+                                moves.push(en_passant_square);
+                            }
                         }
                     }
                 }
             }
         }
-        // Case 3: Other pin directions (horizontal, etc.)
-        else {
-            // Pawn cannot move when pinned horizontally or in other directions
-        }
+        // Case 3: Other pin directions - pawns cannot move
+        // (This is correct - pawns pinned horizontally cannot move)
         
         moves
     }
+    
 
 
 

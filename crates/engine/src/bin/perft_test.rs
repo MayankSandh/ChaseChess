@@ -3,6 +3,6 @@ use engine::Board;
 
 // Add this to your perft_test.rs main function:
 fn main() {
-    run_all_tests(Some(5))
+    run_all_tests(Some(6))
 }
 

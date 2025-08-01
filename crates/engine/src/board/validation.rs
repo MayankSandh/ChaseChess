@@ -203,56 +203,95 @@ impl Board {
     }
 
     pub fn find_king(&self, color: u8) -> Option<Square> {
-        // Use bitboards to find king instantly - O(1) instead of O(64)
-        let king_pieces = self.bitboards.find_pieces(color, KING);
+        println!("🔍 DEBUG find_king: Looking for {} king", if color == WHITE { "WHITE" } else { "BLACK" });
         
-        // There should only be one king per color
-        king_pieces.first().copied()
+        // Add this debug line to see what bitboard you're actually getting
+        let king_bb = self.bitboards.get_pieces(color, KING);
+        println!("🔍 DEBUG find_king: Requested color={}, KING={}, bitboard=0x{:016x}", color, KING, king_bb);
+        
+        // Also debug what pieces are actually in the bitboards
+        let white_king_bb = self.bitboards.get_pieces(WHITE, KING);
+        let black_king_bb = self.bitboards.get_pieces(BLACK, KING);
+        println!("🔍 DEBUG find_king: WHITE king bitboard = 0x{:016x}", white_king_bb);
+        println!("🔍 DEBUG find_king: BLACK king bitboard = 0x{:016x}", black_king_bb);
+        
+        if king_bb == 0 {
+            println!("❌ DEBUG find_king: No king found in bitboards for color {}!", color);
+            return None;
+        }
+        
+        let king_square = Square(king_bb.trailing_zeros() as u8);
+        println!("✅ DEBUG find_king: Found {} king at {:?}", if color == WHITE { "WHITE" } else { "BLACK" }, king_square);
+        
+        Some(king_square)
     }
+    
+    
 
     /// Find all pieces that are checking the king using optimized algorithm
-    pub fn find_checking_pieces(&self, king_square: Square, opponent_color: u8) -> Vec<Square> {
+    pub fn find_checking_pieces(&self, king_square: Square, king_color: u8) -> Vec<Square> {
+        let opponent_color = if king_color == WHITE { BLACK } else { WHITE };
+        println!("🔍 DEBUG find_checking_pieces: Looking for {} pieces checking {} king at {:?}",
+                if opponent_color == WHITE { "WHITE" } else { "BLACK" },
+                if king_color == WHITE { "WHITE" } else { "BLACK" },
+                king_square);
+
         let mut checking_pieces = Vec::new();
         
         // Phase 1: Check pawn threats - if found, return immediately (only one pawn check possible)
         if let Some(pawn_check) = self.find_pawn_check(king_square, opponent_color) {
+            println!("🔍 DEBUG: Found pawn check at {:?}, returning immediately", pawn_check);
             return vec![pawn_check];
         }
+        println!("🔍 DEBUG: No pawn checks found");
         
         // Phase 2: Maintain count variable for other pieces
         let mut count = 0;
         
         // Phase 3: Check knight threats using bitmask AND and trailing_zeros
         if let Some(knight_check) = self.find_knight_check(king_square, opponent_color) {
+            println!("🔍 DEBUG: Found knight check at {:?}", knight_check);
             checking_pieces.push(knight_check);
             count += 1;
+        } else {
+            println!("🔍 DEBUG: No knight checks found");
         }
         
         // Phase 4: Check diagonal directions for enemy bishop/queen
         if let Some(diagonal_check) = self.find_diagonal_check(king_square, opponent_color) {
+            println!("🔍 DEBUG: Found diagonal check at {:?}", diagonal_check);
             checking_pieces.push(diagonal_check);
             count += 1;
             
             // If count == 2, return both checks
             if count == 2 {
+                println!("🔍 DEBUG: Found 2 checks, returning early: {:?}", checking_pieces);
                 return checking_pieces;
             }
+        } else {
+            println!("🔍 DEBUG: No diagonal checks found");
         }
         
         // Phase 5: Check axial directions for rook/queen
         if let Some(axial_check) = self.find_axial_check(king_square, opponent_color) {
+            println!("🔍 DEBUG: Found axial check at {:?}", axial_check);
             checking_pieces.push(axial_check);
             count += 1;
             
             // If count == 2, return both checks
             if count == 2 {
+                println!("🔍 DEBUG: Found 2 checks, returning early: {:?}", checking_pieces);
                 return checking_pieces;
             }
+        } else {
+            println!("🔍 DEBUG: No axial checks found");
         }
         
         // Return all checks found
+        println!("✅ DEBUG find_checking_pieces: Returning {} checking pieces: {:?}", checking_pieces.len(), checking_pieces);
         checking_pieces
     }
+
 
     // Helper function: Find pawn check (only one possible)
     fn find_pawn_check(&self, king_square: Square, opponent_color: u8) -> Option<Square> {

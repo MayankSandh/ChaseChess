@@ -335,8 +335,34 @@ pub fn get_knight_attacks(square: u8) -> Bitboard {
     }
 }
 
-// Public initialization function for the entire engine
-pub fn initialize_engine() {
-    initialize_knight_attacks();
-    // Add other initializations here later
+pub fn debug_knight_attacks() {
+    println!("🔍 DEBUGGING KNIGHT ATTACK MASKS:");
+    
+    // Test knight on e5 (should attack d3, f3, c4, g4, c6, g6, d7, f7)
+    let e5_square = Square::new(4, 4); // e5
+    let knight_attacks = get_knight_attacks(e5_square.0);
+    
+    println!("Knight on e5 attacks mask: 0x{:016x}", knight_attacks);
+    println!("Expected squares: d3(19), f3(21), c4(26), g4(30), c6(42), g6(46), d7(51), f7(53)");
+    
+    // Check each expected square
+    let expected_squares = [19, 21, 26, 30, 42, 46, 51, 53];
+    for square_idx in expected_squares {
+        if (knight_attacks & (1u64 << square_idx)) != 0 {
+            println!("✅ Square {} is attacked", square_idx);
+        } else {
+            println!("❌ Square {} NOT attacked - BUG!", square_idx);
+        }
+    }
 }
+
+pub fn initialize_engine() {
+    println!("🔍 Initializing engine...");
+    // Your existing initialization code here
+    
+    // Add debug call
+    debug_knight_attacks();
+    
+    println!("✅ Engine initialization complete");
+}
+

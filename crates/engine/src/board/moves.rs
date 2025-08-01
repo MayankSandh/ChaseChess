@@ -1,52 +1,52 @@
 use crate::types::*;
 use super::Board;
+use crate::bitboard::{iterate_bits, index_to_square, get_knight_attacks, get_king_attacks};
 
 
 
 impl Board {
     /// Generate all legal moves for the current player
+    /// OPTIMIZED: Uses bitboards to iterate only over squares with our pieces instead of all 64 squares
     pub fn get_all_legal_moves(&self) -> Vec<Move> {
         let mut all_moves = Vec::new();
-    
-        for rank in 0..8 {
-            for file in 0..8 {
-                let square = Square::new(file, rank);
-                let piece = self.get_piece(square);
-    
-                if !is_empty(piece) && is_piece_color(piece, self.current_turn) {
-                    let piece_moves = self.get_legal_moves(square);
-                    let piece_type_val = piece_type(piece);
-    
-                    for target_square in piece_moves {
-                        // Check if this is a pawn promotion
-                        if piece_type_val == PAWN {
-                            let promotion_rank = if piece_color(piece) == WHITE { 7 } else { 0 };
-                            if target_square.rank() == promotion_rank {
-                                // Generate 4 promotion moves - ✅ REMOVE DOUBLE VALIDATION
-                                for &promotion_piece in &[QUEEN, ROOK, BISHOP, KNIGHT] {
-                                    let promotion_move = Move::new_promotion(square, target_square, promotion_piece);
-                                    all_moves.push(promotion_move);  // ✅ No extra validation needed
-                                }
-                            } else {
-                                // Regular pawn move
-                                let regular_move = Move::new(square, target_square);
-                                all_moves.push(regular_move);  // ✅ No extra validation needed
-                            }
-                        } else {
-                            // Non-pawn move
-                            let regular_move = Move::new(square, target_square);
-                            all_moves.push(regular_move);  // ✅ No extra validation needed
+
+        // OPTIMIZATION: Get all pieces of current color using bitboards - O(1) operation
+        let our_pieces = self.bitboards.get_all_pieces(self.current_turn);
+        
+        // OPTIMIZATION: Iterate only over squares with our pieces - O(actual_pieces) instead of O(64)
+        for square_index in iterate_bits(our_pieces) {
+            let square = index_to_square(square_index);
+            let piece = self.get_piece(square);
+            
+            // We know this square has our piece, so no empty check needed
+            let piece_moves = self.get_legal_moves(square);
+            let piece_type_val = piece_type(piece);
+            
+            for target_square in piece_moves {
+                // Check if this is a pawn promotion
+                if piece_type_val == PAWN {
+                    let promotion_rank = if piece_color(piece) == WHITE { 7 } else { 0 };
+                    if target_square.rank() == promotion_rank {
+                        // Generate 4 promotion moves - ✅ REMOVE DOUBLE VALIDATION
+                        for &promotion_piece in &[QUEEN, ROOK, BISHOP, KNIGHT] {
+                            let promotion_move = Move::new_promotion(square, target_square, promotion_piece);
+                            all_moves.push(promotion_move); // ✅ No extra validation needed
                         }
+                    } else {
+                        // Regular pawn move
+                        let regular_move = Move::new(square, target_square);
+                        all_moves.push(regular_move); // ✅ No extra validation needed
                     }
+                } else {
+                    // Non-pawn move
+                    let regular_move = Move::new(square, target_square);
+                    all_moves.push(regular_move); // ✅ No extra validation needed
                 }
             }
         }
-    
+        
         all_moves
     }
-    
-
-
 
     /// Get legal moves for a piece at the given square
     pub fn get_legal_moves(&self, square: Square) -> Vec<Square> {
@@ -124,7 +124,6 @@ impl Board {
         }
     }
     
-
     /// Get pseudo-legal moves (before checking for check/pins)
     pub fn get_pseudo_legal_moves(&self, square: Square) -> Vec<Square> {
         let piece = self.get_piece(square);
@@ -251,32 +250,26 @@ impl Board {
 
     /// Generate knight moves
     fn get_knight_moves(&self, square: Square) -> Vec<Square> {
+        // OPTIMIZED: Use pre-computed knight attack mask instead of manual offsets
+        let knight_attack_mask = get_knight_attacks(square.0);
+        
+        // Can't capture our own pieces
+        let our_pieces = self.bitboards.get_all_pieces(self.current_turn);
+        let valid_moves = knight_attack_mask & !our_pieces;
+        
+        // Convert bitboard to squares
         let mut moves = Vec::new();
-        let file = square.file() as i8;
-        let rank = square.rank() as i8;
-        let source_color = piece_color(self.get_piece(square));
-
-        let knight_offsets = [
-            (-2, -1), (-2, 1), (-1, -2), (-1, 2),
-            (1, -2), (1, 2), (2, -1), (2, 1)
-        ];
-
-        for (df, dr) in knight_offsets {
-            let new_file = file + df;
-            let new_rank = rank + dr;
-
-            if new_file >= 0 && new_file < 8 && new_rank >= 0 && new_rank < 8 {
-                let target_square = Square::new(new_file as u8, new_rank as u8);
-                let target_piece = self.get_piece(target_square);
-
-                if is_empty(target_piece) || piece_color(target_piece) != source_color {
-                    moves.push(target_square);
-                }
-            }
+        let mut remaining_moves = valid_moves;
+        
+        while remaining_moves != 0 {
+            let square_index = remaining_moves.trailing_zeros() as u8;
+            moves.push(index_to_square(square_index));
+            remaining_moves &= remaining_moves - 1; // Remove the processed bit
         }
-
+        
         moves
     }
+    
 
     /// Generate bishop moves
     fn get_bishop_moves(&self, square: Square) -> Vec<Square> {
@@ -297,33 +290,28 @@ impl Board {
         moves
     }
 
-    /// Generate king moves
+    /// Generate king moves - OPTIMIZED with bitboard lookups
     fn get_king_moves(&self, square: Square) -> Vec<Square> {
-        let mut moves = Vec::new();
-        let file = square.file() as i8;
-        let rank = square.rank() as i8;
         let source_color = piece_color(self.get_piece(square));
-
-        // Regular king moves
-        for df in -1..=1 {
-            for dr in -1..=1 {
-                if df == 0 && dr == 0 { continue; }
-
-                let new_file = file + df;
-                let new_rank = rank + dr;
-
-                if new_file >= 0 && new_file < 8 && new_rank >= 0 && new_rank < 8 {
-                    let target_square = Square::new(new_file as u8, new_rank as u8);
-                    let target_piece = self.get_piece(target_square);
-
-                    if is_empty(target_piece) || piece_color(target_piece) != source_color {
-                        moves.push(target_square);
-                    }
-                }
-            }
+        
+        // OPTIMIZED: Use pre-computed king attack mask instead of nested loops
+        let king_attack_mask = get_king_attacks(square.0);
+        
+        // Filter out squares occupied by our own pieces
+        let our_pieces = self.bitboards.get_all_pieces(source_color);
+        let valid_moves = king_attack_mask & !our_pieces;
+        
+        // Convert bitboard to squares
+        let mut moves = Vec::new();
+        let mut remaining_moves = valid_moves;
+        
+        while remaining_moves != 0 {
+            let square_index = remaining_moves.trailing_zeros() as u8;
+            moves.push(index_to_square(square_index));
+            remaining_moves &= remaining_moves - 1; // Remove the processed bit
         }
-
-        // Add castling moves
+        
+        // Add castling moves (unchanged - castling logic remains the same)
         if self.can_castle(source_color, true) {
             // Kingside castling
             let king_rank = square.rank();
@@ -338,6 +326,7 @@ impl Board {
 
         moves
     }
+
 
     /// Generate sliding piece moves in given directions
     fn get_sliding_moves(&self, square: Square, directions: &[(i8, i8)]) -> Vec<Square> {
@@ -525,8 +514,6 @@ impl Board {
                 }
             }
         }
-        // Case 3: Other pin directions - pawns cannot move
-        // (This is correct - pawns pinned horizontally cannot move)
         
         moves
     }

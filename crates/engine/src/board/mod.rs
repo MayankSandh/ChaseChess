@@ -5,6 +5,7 @@ pub mod moves;
 pub mod validation;
 pub mod state;
 pub mod debug;
+use crate::bitboard::BitboardManager; 
 
 
 #[derive(Debug, Clone)]
@@ -19,10 +20,14 @@ pub struct Board {
     pub en_passant_target: Option<Square>,
     pub en_passant_pawn: Option<Square>,
     pub ignore_square_for_threats: RefCell<Option<Square>>,
+    pub bitboards: BitboardManager,
 }
 
 impl Board {
     pub fn new() -> Self {
+
+        crate::bitboard::initialize_knight_attacks();
+
         let mut board = Self {
             squares: [EMPTY; 64],
             current_turn: WHITE,
@@ -34,6 +39,7 @@ impl Board {
             en_passant_target: None,
             en_passant_pawn: None,
             ignore_square_for_threats: RefCell::new(None),
+            bitboards: BitboardManager::new(),
         };
 
         board.setup_starting_position();
@@ -70,6 +76,8 @@ impl Board {
         for file in 0..8 {
             self.squares[Square::new(file, 6).0 as usize] = make_piece(PAWN, BLACK);
         }
+
+        self.bitboards.rebuild_from_squares(&self.squares);
     }
 
     // Basic board operations
@@ -86,6 +94,7 @@ impl Board {
 
     pub fn set_piece(&mut self, square: Square, piece: Piece) {
         self.squares[square.0 as usize] = piece;
+        self.bitboards.update_square(square, piece);
     }
 
     // FEN parsing functionality
@@ -105,7 +114,8 @@ impl Board {
             castling_rights: 0,
             en_passant_target: None,
             en_passant_pawn: None,
-            ignore_square_for_threats: RefCell::new(None),            
+            ignore_square_for_threats: RefCell::new(None),   
+            bitboards: crate::bitboard::BitboardManager::new(),         
         };
 
         // Parse piece placement (part 0)
@@ -230,22 +240,6 @@ impl Board {
         Ok(())
     }
 
-    // Utility methods
-    pub fn can_player_move(&self) -> bool {
-        // Check if current player has any legal moves
-        for rank in 0..8 {
-            for file in 0..8 {
-                let square = Square::new(file, rank);
-                let piece = self.get_piece(square);
-                if is_piece_color(piece, self.current_turn) {
-                    if !self.get_legal_moves(square).is_empty() {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
 
     /// Check if the current player is in check
     pub fn is_in_check(&self) -> bool {
@@ -258,6 +252,36 @@ impl Board {
         let checking_pieces = self.find_checking_pieces(king_square, opponent_color);
         !checking_pieces.is_empty()
     }    
+
+    #[cfg(debug_assertions)]
+    pub fn verify_bitboards(&self) -> bool {
+        // Check that bitboards match the squares array
+        for square_index in 0..64 {
+            let square = Square(square_index);
+            let piece = self.get_piece(square);
+            
+            if crate::types::is_empty(piece) {
+                // Square should not be set in any bitboard
+                if self.bitboards.is_occupied(square) {
+                    println!("ERROR: Square {} is empty but marked as occupied in bitboards", square_index);
+                    return false;
+                }
+            } else {
+                // Square should be set in correct piece bitboard
+                let piece_type_val = crate::types::piece_type(piece);
+                let piece_color_val = crate::types::piece_color(piece);
+                let expected_bitboard = self.bitboards.get_pieces(piece_color_val, piece_type_val);
+                
+                if !crate::bitboard::get_bit(expected_bitboard, square_index) {
+                    println!("ERROR: Square {} has piece type {} color {} but not found in bitboard", 
+                             square_index, piece_type_val, piece_color_val);
+                    return false;
+                }
+            }
+        }
+        println!("✅ Bitboard synchronization check PASSED");
+        true
+    }
 
 }
 
@@ -293,3 +317,55 @@ pub fn move_to_algebraic(mv: Move) -> String {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bitboard_sync() {
+        // Initialize engine first
+        crate::bitboard::initialize_engine();
+        
+        let board = Board::new();
+        assert!(board.verify_bitboards(), "Initial board should have synchronized bitboards");
+        
+        println!("Bitboard sync test completed successfully!");
+    }
+
+    #[test]
+    fn test_bitboard_knight_detection() {
+        // Initialize engine
+        crate::bitboard::initialize_engine();
+        
+        // Create a board with a known knight check position
+        let mut board = Board::new();
+        
+        // Clear the board first
+        for i in 0..64 {
+            board.set_piece(Square(i), EMPTY);
+        }
+        
+        // Set up a simple position: White king on e1, Black knight on d3 checking it
+        let white_king_square = Square::new(4, 0); // e1
+        let black_knight_square = Square::new(3, 2); // d3
+        
+        board.set_piece(white_king_square, crate::types::make_piece(WHITE, KING));
+        board.set_piece(black_knight_square, crate::types::make_piece(BLACK, KNIGHT));
+        board.current_turn = WHITE; // White to move, in check
+        
+        println!("Test position: White king on e1, Black knight on d3");
+        
+        // Verify bitboard sync
+        assert!(board.verify_bitboards(), "Bitboards should be synchronized");
+        
+        // Test knight check detection
+        let checking_pieces = board.find_checking_pieces(white_king_square, BLACK);
+        println!("Found {} checking pieces: {:?}", checking_pieces.len(), checking_pieces);
+        
+        // Should find exactly one checking piece (the knight on d3)
+        assert_eq!(checking_pieces.len(), 1, "Should find exactly one checking piece");
+        assert_eq!(checking_pieces[0], black_knight_square, "Should find the knight on d3");
+        
+        println!("✅ Knight check detection test PASSED!");
+    }
+}

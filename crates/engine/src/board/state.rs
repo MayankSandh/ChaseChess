@@ -42,7 +42,6 @@ impl Board {
         game_move.is_en_passant = is_en_passant;
         game_move.promotion = mv.promotion;
     
-        // ✅ FIX: UPDATE CASTLING RIGHTS BEFORE MOVING PIECES
         if !is_castling && !is_en_passant {
             self.update_castling_rights_fixed(mv, moving_piece, captured_piece);
         }
@@ -61,7 +60,6 @@ impl Board {
                 self.set_piece(mv.to, moving_piece);
             }
             self.set_piece(mv.from, EMPTY);
-            // ✅ Castling rights already updated above
         }
     
         // NEW EN PASSANT LOGIC: Only set if current move is double pawn push
@@ -81,7 +79,6 @@ impl Board {
         if self.current_turn == WHITE {
             self.full_move_number += 1;
         }
-    
         self.update_game_status();
         Ok(game_move)
     }
@@ -90,7 +87,6 @@ impl Board {
     pub fn update_castling_rights_fixed(&mut self, mv: Move, moving_piece: Piece, captured_piece: Piece) {
         let piece_color_val = piece_color(moving_piece);
     
-        // ✅ FIX: Now we have the actual moving piece!
         if piece_type(moving_piece) == KING {
             if piece_color_val == WHITE {
                 remove_castling_right(&mut self.castling_rights, WHITE_KINGSIDE);

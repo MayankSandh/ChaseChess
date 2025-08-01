@@ -1,7 +1,7 @@
 use crate::types::*;
 use super::{Board};
 use std::collections::HashSet;
-
+use crate::bitboard::{get_knight_attacks, index_to_square, iterate_bits};
 
 
 impl Board {
@@ -202,15 +202,79 @@ impl Board {
         false
     }
 
-    /// Find the king of the specified color
     pub fn find_king(&self, color: u8) -> Option<Square> {
-        for rank in 0..8 {
-            for file in 0..8 {
-                let square = Square::new(file, rank);
-                let piece = self.get_piece(square);
+        // Use bitboards to find king instantly - O(1) instead of O(64)
+        let king_pieces = self.bitboards.find_pieces(color, KING);
+        
+        // There should only be one king per color
+        king_pieces.first().copied()
+    }
+
+    /// Find all pieces that are checking the king using optimized algorithm
+    pub fn find_checking_pieces(&self, king_square: Square, opponent_color: u8) -> Vec<Square> {
+        let mut checking_pieces = Vec::new();
+        
+        // Phase 1: Check pawn threats - if found, return immediately (only one pawn check possible)
+        if let Some(pawn_check) = self.find_pawn_check(king_square, opponent_color) {
+            return vec![pawn_check];
+        }
+        
+        // Phase 2: Maintain count variable for other pieces
+        let mut count = 0;
+        
+        // Phase 3: Check knight threats using bitmask AND and trailing_zeros
+        if let Some(knight_check) = self.find_knight_check(king_square, opponent_color) {
+            checking_pieces.push(knight_check);
+            count += 1;
+        }
+        
+        // Phase 4: Check diagonal directions for enemy bishop/queen
+        if let Some(diagonal_check) = self.find_diagonal_check(king_square, opponent_color) {
+            checking_pieces.push(diagonal_check);
+            count += 1;
+            
+            // If count == 2, return both checks
+            if count == 2 {
+                return checking_pieces;
+            }
+        }
+        
+        // Phase 5: Check axial directions for rook/queen
+        if let Some(axial_check) = self.find_axial_check(king_square, opponent_color) {
+            checking_pieces.push(axial_check);
+            count += 1;
+            
+            // If count == 2, return both checks
+            if count == 2 {
+                return checking_pieces;
+            }
+        }
+        
+        // Return all checks found
+        checking_pieces
+    }
+
+    // Helper function: Find pawn check (only one possible)
+    fn find_pawn_check(&self, king_square: Square, opponent_color: u8) -> Option<Square> {
+        let king_file = king_square.file() as i8;
+        let king_rank = king_square.rank() as i8;
+        
+        // Pawn attack direction (where pawns could attack from)
+        let attack_direction = if opponent_color == WHITE { -1 } else { 1 };
+        
+        // Check both diagonal squares where attacking pawns could be
+        for df in [-1, 1] {
+            let pawn_file = king_file + df;
+            let pawn_rank = king_rank + attack_direction;
+            
+            if pawn_file >= 0 && pawn_file < 8 && pawn_rank >= 0 && pawn_rank < 8 {
+                let pawn_square = Square::new(pawn_file as u8, pawn_rank as u8);
                 
-                if piece_type(piece) == KING && piece_color(piece) == color {
-                    return Some(square);
+                if self.bitboards.is_occupied_by(pawn_square, opponent_color) {
+                    let piece = self.get_piece(pawn_square);
+                    if piece_type(piece) == PAWN {
+                        return Some(pawn_square);
+                    }
                 }
             }
         }
@@ -218,26 +282,85 @@ impl Board {
         None
     }
 
-    /// Find all pieces that are checking the king
-    pub fn find_checking_pieces(&self, king_square: Square, opponent_color: u8) -> Vec<Square> {
-        let mut checking_pieces = Vec::new();
+    // Helper function: Find knight check using your elegant approach
+    fn find_knight_check(&self, king_square: Square, opponent_color: u8) -> Option<Square> {
+        // Get pre-computed knight attack mask for king's position
+        let knight_attack_mask = get_knight_attacks(king_square.0);
         
-        // Check all opponent pieces to see if they attack the king
-        for rank in 0..8 {
-            for file in 0..8 {
-                let square = Square::new(file, rank);
-                let piece = self.get_piece(square);
-                
-                if !is_empty(piece) && piece_color(piece) == opponent_color {
-                    if self.piece_attacks_square(square, king_square) {
-                        checking_pieces.push(square);
-                    }
-                }
+        // Get opponent's knights
+        let opponent_knights = self.bitboards.get_pieces(opponent_color, KNIGHT);
+        
+        // AND operation - gives us bits set only at attacking knight positions
+        let checking_knights = knight_attack_mask & opponent_knights;
+        
+        if checking_knights != 0 {
+            // Get the bit index - that's our knight square!
+            let knight_square_index = checking_knights.trailing_zeros() as u8;
+            Some(index_to_square(knight_square_index))
+        } else {
+            None
+        }
+    }
+
+    // Helper function: Find diagonal check (bishop/queen)
+    fn find_diagonal_check(&self, king_square: Square, opponent_color: u8) -> Option<Square> {
+        // 4 diagonal directions
+        let diagonal_directions = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
+        
+        for direction in diagonal_directions {
+            if let Some(checking_piece) = self.trace_ray_for_check(king_square, direction, opponent_color, &[BISHOP, QUEEN]) {
+                return Some(checking_piece);
             }
         }
         
-        checking_pieces
+        None
     }
+
+    // Helper function: Find axial check (rook/queen)
+    fn find_axial_check(&self, king_square: Square, opponent_color: u8) -> Option<Square> {
+        // 4 axial directions
+        let axial_directions = [(0, 1), (0, -1), (1, 0), (-1, 0)];
+        
+        for direction in axial_directions {
+            if let Some(checking_piece) = self.trace_ray_for_check(king_square, direction, opponent_color, &[ROOK, QUEEN]) {
+                return Some(checking_piece);
+            }
+        }
+        
+        None
+    }
+
+    // Core ray tracing function with piece type filtering
+    fn trace_ray_for_check(&self, king_square: Square, direction: (i8, i8), opponent_color: u8, valid_piece_types: &[u8]) -> Option<Square> {
+        let mut current_file = king_square.file() as i8 + direction.0;
+        let mut current_rank = king_square.rank() as i8 + direction.1;
+        
+        while current_file >= 0 && current_file < 8 && current_rank >= 0 && current_rank < 8 {
+            let current_square = Square::new(current_file as u8, current_rank as u8);
+            
+            if self.bitboards.is_occupied(current_square) {
+                let piece = self.get_piece(current_square);
+                
+                if piece_color(piece) == opponent_color {
+                    let piece_type_val = piece_type(piece);
+                    
+                    // Check if this piece type can attack in this direction
+                    if valid_piece_types.contains(&piece_type_val) {
+                        return Some(current_square);
+                    }
+                }
+                
+                // Hit any piece - ray blocked, stop tracing
+                return None;
+            }
+            
+            current_file += direction.0;
+            current_rank += direction.1;
+        }
+        
+        None
+    }
+
 
     /// Check if a piece at 'from' attacks 'to'
     pub fn piece_attacks_square(&self, from: Square, to: Square) -> bool {

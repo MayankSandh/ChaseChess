@@ -5,6 +5,7 @@ pub mod moves;
 pub mod validation;
 pub mod state;
 pub mod debug;
+use crate::bitboard::BitboardManager;
 
 
 #[derive(Debug, Clone)]
@@ -19,6 +20,7 @@ pub struct Board {
     pub en_passant_target: Option<Square>,
     pub en_passant_pawn: Option<Square>,
     pub ignore_square_for_threats: RefCell<Option<Square>>,
+    pub bitboards: BitboardManager,
 }
 
 impl Board {
@@ -34,6 +36,7 @@ impl Board {
             en_passant_target: None,
             en_passant_pawn: None,
             ignore_square_for_threats: RefCell::new(None),
+            bitboards: BitboardManager::new()
         };
 
         board.setup_starting_position();
@@ -70,6 +73,8 @@ impl Board {
         for file in 0..8 {
             self.squares[Square::new(file, 6).0 as usize] = make_piece(PAWN, BLACK);
         }
+
+        self.bitboards.rebuild_from_squares(&self.squares);
     }
 
     // Basic board operations
@@ -86,6 +91,19 @@ impl Board {
 
     pub fn set_piece(&mut self, square: Square, piece: Piece) {
         self.squares[square.0 as usize] = piece;
+        self.bitboards.update_square(square, piece);
+    }
+
+    pub fn all_pieces(&self) -> u64 {
+        self.bitboards.all_pieces
+    }
+    
+    pub fn white_pieces(&self) -> u64 {
+        self.bitboards.white_pieces
+    }
+    
+    pub fn black_pieces(&self) -> u64 {
+        self.bitboards.black_pieces
     }
 
     // FEN parsing functionality
@@ -105,7 +123,8 @@ impl Board {
             castling_rights: 0,
             en_passant_target: None,
             en_passant_pawn: None,
-            ignore_square_for_threats: RefCell::new(None),            
+            ignore_square_for_threats: RefCell::new(None), 
+            bitboards: BitboardManager::new(),           
         };
 
         // Parse piece placement (part 0)
@@ -293,3 +312,47 @@ pub fn move_to_algebraic(mv: Move) -> String {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bitboard::*;
+
+    #[test]
+    fn test_bitboard_integration() {
+        let board = Board::new();
+        
+        // Test that bitboards match the starting position
+        assert_eq!(board.bitboards.count_pieces(WHITE, PAWN), 8);
+        assert_eq!(board.bitboards.count_pieces(BLACK, PAWN), 8);
+        assert_eq!(board.bitboards.count_pieces(WHITE, ROOK), 2);
+        assert_eq!(board.bitboards.count_pieces(BLACK, ROOK), 2);
+        
+        // Test that total piece count is correct
+        let total_white = count_bits(board.white_pieces());
+        let total_black = count_bits(board.black_pieces());
+        assert_eq!(total_white, 16);
+        assert_eq!(total_black, 16);
+        
+        println!("Bitboard integration test passed!");
+    }
+    
+    #[test]
+    fn test_piece_updates() {
+        let mut board = Board::new();
+        
+        // Move white pawn from e2 to e4
+        let from = Square(12); // e2
+        let to = Square(28);   // e4
+        let piece = board.get_piece(from);
+        
+        board.set_piece(from, EMPTY);
+        board.set_piece(to, piece);
+        
+        // Check that bitboards updated correctly
+        assert!(!board.bitboards.is_occupied(from));
+        assert!(board.bitboards.is_occupied(to));
+        assert!(board.bitboards.is_occupied_by(to, WHITE));
+        
+        println!("Piece update test passed!");
+    }
+}

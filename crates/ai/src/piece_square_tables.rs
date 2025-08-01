@@ -347,82 +347,48 @@ pub fn calculate_game_phase(board: &Board) -> u8 {
 }
 
 fn count_pieces(board: &Board) -> ((u8, u8, u8, u8, u8, u8), (u8, u8, u8, u8, u8, u8)) {
-    let mut white_pieces = (0, 0, 0, 0, 0, 0); // (P, N, B, R, Q, K)
-    let mut black_pieces = (0, 0, 0, 0, 0, 0);
+    let white_pieces = (
+        board.bitboards.count_pieces(WHITE, PAWN) as u8,
+        board.bitboards.count_pieces(WHITE, KNIGHT) as u8,
+        board.bitboards.count_pieces(WHITE, BISHOP) as u8,
+        board.bitboards.count_pieces(WHITE, ROOK) as u8,
+        board.bitboards.count_pieces(WHITE, QUEEN) as u8,
+        board.bitboards.count_pieces(WHITE, KING) as u8,
+    );
     
-    for rank in 0..8 {
-        for file in 0..8 {
-            let square = Square::new(file, rank);
-            let piece = board.get_piece(square);
-            
-            if !is_empty(piece) {
-                let piece_type = piece_type(piece);
-                let piece_color = piece_color(piece);
-                
-                let index = match piece_type {
-                    PAWN => 0,
-                    KNIGHT => 1,
-                    BISHOP => 2,
-                    ROOK => 3,
-                    QUEEN => 4,
-                    KING => 5,
-                    _ => continue,
-                };
-                
-                if piece_color == WHITE {
-                    match index {
-                        0 => white_pieces.0 += 1,
-                        1 => white_pieces.1 += 1,
-                        2 => white_pieces.2 += 1,
-                        3 => white_pieces.3 += 1,
-                        4 => white_pieces.4 += 1,
-                        5 => white_pieces.5 += 1,
-                        _ => {}
-                    }
-                } else {
-                    match index {
-                        0 => black_pieces.0 += 1,
-                        1 => black_pieces.1 += 1,
-                        2 => black_pieces.2 += 1,
-                        3 => black_pieces.3 += 1,
-                        4 => black_pieces.4 += 1,
-                        5 => black_pieces.5 += 1,
-                        _ => {}
-                    }
-                }
-            }
-        }
-    }
+    let black_pieces = (
+        board.bitboards.count_pieces(BLACK, PAWN) as u8,
+        board.bitboards.count_pieces(BLACK, KNIGHT) as u8,
+        board.bitboards.count_pieces(BLACK, BISHOP) as u8,
+        board.bitboards.count_pieces(BLACK, ROOK) as u8,
+        board.bitboards.count_pieces(BLACK, QUEEN) as u8,
+        board.bitboards.count_pieces(BLACK, KING) as u8,
+    );
     
     (white_pieces, black_pieces)
 }
+
 
 fn total_pieces(pieces: &(u8, u8, u8, u8, u8, u8)) -> u8 {
     pieces.0 + pieces.1 + pieces.2 + pieces.3 + pieces.4 + pieces.5
 }
 
 fn calculate_total_material(board: &Board) -> i32 {
-    let mut material = 0;
-    
-    for rank in 0..8 {
-        for file in 0..8 {
-            let square = Square::new(file, rank);
-            let piece = board.get_piece(square);
-            
-            if !is_empty(piece) {
-                let piece_value = match piece_type(piece) {
-                    PAWN => 100,
-                    KNIGHT => 320,
-                    BISHOP => 330,
-                    ROOK => 500,
-                    QUEEN => 900,
-                    KING => 20000, 
-                    _ => 0,
-                };
-                material += piece_value;
-            }
-        }
-    }
-    
+    let material = 
+        (board.bitboards.count_pieces(WHITE, PAWN) as i32) * 100 +
+        (board.bitboards.count_pieces(WHITE, KNIGHT) as i32) * 320 +
+        (board.bitboards.count_pieces(WHITE, BISHOP) as i32) * 330 +
+        (board.bitboards.count_pieces(WHITE, ROOK) as i32) * 500 +
+        (board.bitboards.count_pieces(WHITE, QUEEN) as i32) * 900 +
+        (board.bitboards.count_pieces(WHITE, KING) as i32) * 20000 +
+        
+        (board.bitboards.count_pieces(BLACK, PAWN) as i32) * 100 +
+        (board.bitboards.count_pieces(BLACK, KNIGHT) as i32) * 320 +
+        (board.bitboards.count_pieces(BLACK, BISHOP) as i32) * 330 +
+        (board.bitboards.count_pieces(BLACK, ROOK) as i32) * 500 +
+        (board.bitboards.count_pieces(BLACK, QUEEN) as i32) * 900 +
+        (board.bitboards.count_pieces(BLACK, KING) as i32) * 20000;
+        
     material
 }
+

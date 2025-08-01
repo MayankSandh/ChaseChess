@@ -1,49 +1,49 @@
 use crate::types::*;
 use super::Board;
 
-
-
 impl Board {
     /// Generate all legal moves for the current player
     pub fn get_all_legal_moves(&self) -> Vec<Move> {
         let mut all_moves = Vec::new();
-    
-        for rank in 0..8 {
-            for file in 0..8 {
-                let square = Square::new(file, rank);
-                let piece = self.get_piece(square);
-    
-                if !is_empty(piece) && is_piece_color(piece, self.current_turn) {
-                    let piece_moves = self.get_legal_moves(square);
-                    let piece_type_val = piece_type(piece);
-    
-                    for target_square in piece_moves {
-                        // Check if this is a pawn promotion
-                        if piece_type_val == PAWN {
-                            let promotion_rank = if piece_color(piece) == WHITE { 7 } else { 0 };
-                            if target_square.rank() == promotion_rank {
-                                // Generate 4 promotion moves - ✅ REMOVE DOUBLE VALIDATION
-                                for &promotion_piece in &[QUEEN, ROOK, BISHOP, KNIGHT] {
-                                    let promotion_move = Move::new_promotion(square, target_square, promotion_piece);
-                                    all_moves.push(promotion_move);  // ✅ No extra validation needed
-                                }
-                            } else {
-                                // Regular pawn move
-                                let regular_move = Move::new(square, target_square);
-                                all_moves.push(regular_move);  // ✅ No extra validation needed
-                            }
-                        } else {
-                            // Non-pawn move
-                            let regular_move = Move::new(square, target_square);
-                            all_moves.push(regular_move);  // ✅ No extra validation needed
+        
+        // Get all pieces of current color using bitboards - O(1) operation
+        let our_pieces = self.bitboards.get_all_pieces(self.current_turn);
+        
+        // Iterate only over squares with our pieces - O(actual_pieces) instead of O(64)
+        for square_index in crate::bitboard::iterate_bits(our_pieces) {
+            let square = crate::bitboard::index_to_square(square_index);
+            let piece = self.get_piece(square);
+            
+            // We know this square has our piece, so no empty check needed
+            let piece_moves = self.get_legal_moves(square);
+            let piece_type_val = piece_type(piece);
+            
+            for target_square in piece_moves {
+                // Check if this is a pawn promotion
+                if piece_type_val == PAWN {
+                    let promotion_rank = if piece_color(piece) == WHITE { 7 } else { 0 };
+                    if target_square.rank() == promotion_rank {
+                        // Generate 4 promotion moves
+                        for &promotion_piece in &[QUEEN, ROOK, BISHOP, KNIGHT] {
+                            let promotion_move = Move::new_promotion(square, target_square, promotion_piece);
+                            all_moves.push(promotion_move);
                         }
+                    } else {
+                        // Regular pawn move
+                        let regular_move = Move::new(square, target_square);
+                        all_moves.push(regular_move);
                     }
+                } else {
+                    // Non-pawn move
+                    let regular_move = Move::new(square, target_square);
+                    all_moves.push(regular_move);
                 }
             }
         }
-    
+        
         all_moves
     }
+    
     
 
 
@@ -525,14 +525,8 @@ impl Board {
                 }
             }
         }
-        // Case 3: Other pin directions - pawns cannot move
-        // (This is correct - pawns pinned horizontally cannot move)
         
         moves
     }
     
-
-
-
-
 }

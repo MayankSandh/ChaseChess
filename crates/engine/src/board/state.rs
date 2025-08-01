@@ -42,7 +42,6 @@ impl Board {
         game_move.is_en_passant = is_en_passant;
         game_move.promotion = mv.promotion;
     
-        // ✅ FIX: UPDATE CASTLING RIGHTS BEFORE MOVING PIECES
         if !is_castling && !is_en_passant {
             self.update_castling_rights_fixed(mv, moving_piece, captured_piece);
         }

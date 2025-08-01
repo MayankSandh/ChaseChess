@@ -122,16 +122,15 @@ impl eframe::App for ChessApp {
         // Handle AI move timing outside the panel
         if let Some(scheduled_time) = self.ai_move_scheduled {
             let elapsed = scheduled_time.elapsed();
-            if elapsed.as_millis() >= 500 { // 500ms delay
-                println!("TIMING: AI delay complete, triggering move");
+            if elapsed.as_millis() >= 10 { // 500ms delay
                 self.ai_move_scheduled = None;
                 if !self.game_over && !self.is_ai_thinking {
                     self.trigger_ai_move();
                 }
             } else {
                 // Use egui's proper timing system to schedule the next check
-                let remaining = 500 - elapsed.as_millis() as u64;
-                ctx.request_repaint_after(std::time::Duration::from_millis(remaining.min(50)));
+                let remaining = 10 - elapsed.as_millis() as u64;
+                ctx.request_repaint_after(std::time::Duration::from_millis(remaining.min(10)));
             }
         }
     }
@@ -160,14 +159,12 @@ impl ChessApp {
             } else if self.legal_moves.contains(&clicked_square) {
                 let mv = Move::new(selected, clicked_square);
                 if self.board.try_make_move(mv).is_ok() {
-                    println!("USER: Move applied successfully");
                     self.selected_square = None;
                     self.legal_moves.clear();
                     
                     // Schedule AI move with proper timing
                     if self.board.current_turn == BLACK && self.ai_enabled {
                         self.ai_move_scheduled = Some(Instant::now());
-                        println!("USER: AI move scheduled for 0.5 seconds from now");
                     }
                     
                     self.check_game_over();
@@ -189,39 +186,23 @@ impl ChessApp {
     
     fn trigger_ai_move(&mut self) {
         if self.game_over {
-            println!("AI: Move cancelled - game is over");
             return;
         }
         
-        println!("AI: Triggering move for BLACK");
-        println!("AI: Board current_turn = {}", 
-            if self.board.current_turn == 0 { "BLACK" } else { "WHITE" });
         
         self.is_ai_thinking = true;
         
-        println!("AI: Starting search with depth 3");
         let result = self.ai_engine.search(&mut self.board, 4);
-        println!("AI: Search returned");
         
         if let Some(ai_move) = result.best_move {
-            println!("AI: Applying best move: ({},{}) to ({},{})", 
-                ai_move.from.file(), ai_move.from.rank(),
-                ai_move.to.file(), ai_move.to.rank());
             
             if self.board.try_make_move(ai_move).is_ok() {
                 self.last_ai_move = Some(ai_move);
-                println!("AI: Move applied successfully - Eval: {} | Nodes: {}", 
-                    result.evaluation, result.nodes_searched);
-            } else {
-                println!("AI: ERROR - Failed to apply AI move");
-            }
-        } else {
-            println!("AI: No valid move found");
-        }
+            } 
+        } 
         
         self.is_ai_thinking = false;
         self.check_game_over();
-        println!("AI: Move sequence complete");
     }
     
     
@@ -229,12 +210,6 @@ impl ChessApp {
         let legal_moves = self.board.get_all_legal_moves();
         if legal_moves.is_empty() {
             self.game_over = true;
-            if self.board.is_in_check() {
-                println!("Checkmate! {} wins!", 
-                    if self.board.current_turn == WHITE { "Black" } else { "White" });
-            } else {
-                println!("Stalemate! It's a draw.");
-            }
         }
     }
     

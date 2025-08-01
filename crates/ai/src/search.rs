@@ -1,6 +1,7 @@
 use engine::{Board, Move};
 use crate::{evaluation::*, types::*};
 use crate::transposition::*;
+use crate::piece_square_tables::initialize_pst;
 
 pub struct SearchEngine {
     pub nodes_searched: u64,
@@ -9,6 +10,7 @@ pub struct SearchEngine {
 
 impl SearchEngine {
     pub fn new() -> Self {
+        initialize_pst();
         Self { 
             nodes_searched: 0,
             transposition_table: TranspositionTable::new(64), // 64MB transposition table
@@ -68,12 +70,13 @@ impl SearchEngine {
         
         // Probe transposition table
         let hash = self.transposition_table.get_hash(board);
-        if let Some((tt_score, tt_move)) = self.transposition_table.probe(hash, depth, alpha, beta) {
+        if let Some((tt_score, _tt_move)) = self.transposition_table.probe(hash, depth, alpha, beta) {
             return tt_score;
         }
     
         if depth <= 0 {
-            let eval = evaluate_position(board);
+            // Call quiescence search instead of static evaluation
+            let eval = self.quiescence_search(board, alpha, beta);
             self.transposition_table.store(hash, depth, eval, None, NodeType::Exact);
             return eval;
         }
@@ -101,14 +104,12 @@ impl SearchEngine {
                 }
                 
                 if alpha >= beta {
-                    // Store beta cutoff
                     self.transposition_table.store(hash, depth, beta, best_move, NodeType::LowerBound);
                     return beta;
                 }
             }
         }
         
-        // Store result in transposition table
         let node_type = if alpha <= original_alpha {
             NodeType::UpperBound
         } else {
@@ -120,7 +121,6 @@ impl SearchEngine {
     }
     
     
-
     fn order_moves(&self, board: &Board, moves: &mut Vec<Move>) {
         moves.sort_by_key(|&mv| {
             let from_piece = board.get_piece(mv.from);
@@ -150,6 +150,59 @@ impl SearchEngine {
         });
     }
     
+    fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32) -> i32 {
+        self.nodes_searched += 1;
+        
+        // Stand pat - evaluate current position
+        let stand_pat = evaluate_position(board);
+        
+        if stand_pat >= beta {
+            return beta;
+        }
+        
+        if stand_pat > alpha {
+            alpha = stand_pat;
+        }
+        
+        // Get only capture moves
+        let captures = self.get_capture_moves(board);
+        
+        // Delta pruning - skip captures that can't improve position significantly
+        let big_delta = 900; // Queen value - largest possible material gain
+        if stand_pat + big_delta < alpha {
+            return alpha;
+        }
+        
+        // Search captures
+        for &mv in &captures {
+            if let Ok(_) = board.try_make_move(mv) {
+                let score = -self.quiescence_search(board, -beta, -alpha);
+                if let Err(_) = board.undo_move() { break; }
+                
+                if score >= beta {
+                    return beta;
+                }
+                
+                if score > alpha {
+                    alpha = score;
+                }
+            }
+        }
+        
+        alpha
+    }
+    
+    fn get_capture_moves(&self, board: &Board) -> Vec<Move> {
+        board.get_all_legal_moves()
+            .into_iter()
+            .filter(|&mv| {
+                let to_piece = board.get_piece(mv.to);
+                !engine::types::is_empty(to_piece) // Only captures
+            })
+            .collect()
+    }
+    
+
 }
 
 impl Default for SearchEngine {

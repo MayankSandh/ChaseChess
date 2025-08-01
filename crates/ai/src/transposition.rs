@@ -30,8 +30,6 @@ pub struct ZobristKeys {
 
 impl ZobristKeys {
     pub fn new() -> Self {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
         
         let mut keys = ZobristKeys {
             pieces: [[[0; 8]; 8]; 12],

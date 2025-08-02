@@ -1,0 +1,59 @@
+=== Chess Game Debug Log ===
+Game Duration: 27.5s
+Total Moves: 12
+Debug Enabled: true
+Advanced Logger Enabled: true
+
+[007.93s] Move 1: HUMAN played g1f3 (Knight)
+[007.95s] Move 2: AI played g8f6 (Knight)
+  AI thinking time: 0.000s, Evaluation: -4 cp
+[007.95s] 🔍 Advanced AI Analysis:
+[007.95s]   - Nodes searched: 20
+[007.95s]   - Search depth: 4
+[007.95s]   - Evaluation: 20 centipawns
+[009.33s] Move 3: HUMAN played b1c3 (Knight)
+[009.35s] Move 4: AI played b8c6 (Knight)
+  AI thinking time: 0.000s, Evaluation: -2 cp
+[009.35s] 🔍 Advanced AI Analysis:
+[009.35s]   - Nodes searched: 22
+[009.35s]   - Search depth: 4
+[009.35s]   - Evaluation: 22 centipawns
+[010.54s] Move 5: HUMAN played d2d4 (Pawn)
+[012.02s] Move 6: AI played f6g4 (Knight)
+  AI thinking time: 1.475s, Evaluation: 6 cp
+[012.02s] 🔍 Advanced AI Analysis:
+[012.02s]   - Nodes searched: 35404
+[012.02s]   - Search depth: 4
+[012.02s]   - Evaluation: 4 centipawns
+[013.34s] Move 7: HUMAN played e2e4 (Pawn)
+[013.37s] Move 8: AI played c6a5 (Knight)
+  AI thinking time: 0.001s, Evaluation: 7 cp
+[013.37s] 🔍 Advanced AI Analysis:
+[013.37s]   - Nodes searched: 27
+[013.37s]   - Search depth: 4
+[013.37s]   - Evaluation: 27 centipawns
+[015.15s] Move 9: HUMAN played c1d2 (Bishop)
+[015.17s] Move 10: AI played g4f2 (Knight)
+  AI thinking time: 0.000s, Evaluation: 452 cp
+[015.17s] 🔍 Advanced AI Analysis:
+[015.17s]   - Nodes searched: 26
+[015.17s]   - Search depth: 4
+[015.17s]   - Evaluation: 26 centipawns
+[021.54s] 🎯 HUMAN selected King on e1, Legal moves: [] (count: 0)
+[022.58s] 🎯 HUMAN selected Bishop on f1, Legal moves: [e2, d3, c4, b5, a6] (count: 5)
+[022.93s] 🎯 HUMAN selected King on e1, Legal moves: [] (count: 0)
+[023.29s] 🎯 HUMAN selected Queen on d1, Legal moves: [c1, b1, e2] (count: 3)
+[023.62s] 🎯 HUMAN selected Bishop on d2, Legal moves: [e3, f4, g5, h6, c1] (count: 5)
+[024.05s] 🎯 HUMAN selected Queen on d1, Legal moves: [c1, b1, e2] (count: 3)
+[024.38s] 🎯 HUMAN selected King on e1, Legal moves: [] (count: 0)
+[024.84s] 🎯 HUMAN selected Bishop on f1, Legal moves: [e2, d3, c4, b5, a6] (count: 5)
+[025.42s] Move 11: HUMAN played f1d3 (Bishop)
+[025.43s] Move 12: AI played f2d1 (Knight)
+  AI thinking time: 0.000s, Evaluation: 694 cp
+[025.43s] 🔍 Advanced AI Analysis:
+[025.43s]   - Nodes searched: 26
+[025.43s]   - Search depth: 4
+[025.43s]   - Evaluation: 26 centipawns
+[027.54s] === Game finished abruptly (New Game pressed) ===
+
+=== END LOG ===

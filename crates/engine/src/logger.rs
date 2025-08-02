@@ -1,7 +1,7 @@
 use std::fs::{self, File};
 use std::io::Write;
 use std::time::Instant;
-use chrono::{DateTime, Local};
+use chrono::{Local};
 use crate::types::*;
 
 pub struct ChessLogger {

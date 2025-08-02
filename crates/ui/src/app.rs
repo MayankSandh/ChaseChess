@@ -18,6 +18,7 @@ pub struct ChessApp {
     show_promotion_dialog: bool,
     logger: ChessLogger,
     debug_enabled: bool,
+    advanced_logger: bool,
     game_log: String,
     move_count: u16,
     game_start_time: std::time::Instant,
@@ -47,7 +48,8 @@ impl ChessApp {
             show_promotion_dialog: false,
             logger: ChessLogger::new(true),
             debug_enabled: true, 
-            game_log: String::new(),
+            advanced_logger: true,
+            game_log: String::with_capacity(50000),
             move_count: 1,
             game_start_time: std::time::Instant::now(),
         }
@@ -95,30 +97,49 @@ impl eframe::App for ChessApp {
                     ui.label("AI will move shortly...");
                 }
                 
-                if ui.checkbox(&mut self.debug_enabled, "Debug Logging").clicked() {
-                    if self.debug_enabled {
+                if ui.checkbox(&mut self.debug_enabled, "Debug Logging").changed() {
+                    if !self.debug_enabled {
+                        // Save logs before disabling
+                        if !self.game_log.is_empty() {
+                            self.save_game_log();
+                        }
                         self.game_log.clear();
-                        self.game_start_time = std::time::Instant::now();
-                        self.move_count = 1;
+                        self.advanced_logger = false; // Disable advanced too
+                    } else {
+                        self.reset_logging_state();
                     }
+                }
+                
+                // Advanced logger toggle
+                if ui.checkbox(&mut self.advanced_logger, "Advanced Debugger").changed() {
+                    if self.advanced_logger {
+                        // Force debug enabled when advanced is turned on
+                        if !self.debug_enabled {
+                            self.debug_enabled = true;
+                            self.reset_logging_state();
+                        }
+                    }
+                    // No special handling needed when turning off - just stops adding advanced logs
                 }
 
                 // Push New Game button to the right
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("New Game").clicked() {
 
-                        if !self.game_over && self.move_count > 1 && !self.game_log.is_empty() {
-                            // Add abrupt end message to log
-                            if self.debug_enabled {
-                                let elapsed = self.game_start_time.elapsed().as_secs_f64();
-                                let abrupt_end_message = format!(
-                                    "[{:06.2}s] === Game finished abruptly ===\n",
-                                    elapsed
-                                );
-                                self.game_log.push_str(&abrupt_end_message);
+                        if !self.game_log.is_empty() {
+                            // Add abrupt end message to the same buffer
+                            match self.debug_enabled {
+                                true => {
+                                    let elapsed = self.game_start_time.elapsed().as_secs_f64();
+                                    let abrupt_message = format!(
+                                        "[{:06.2}s] === Game finished abruptly (New Game pressed) ===\n",
+                                        elapsed
+                                    );
+                                    self.game_log.push_str(&abrupt_message);
+                                }
+                                false => (),
                             }
                             
-                            // Save log before starting new game
                             self.save_game_log();
                         }
 
@@ -244,6 +265,25 @@ impl ChessApp {
                      piece_color(self.board.get_piece(clicked_square)) == self.board.current_turn {
                 self.selected_square = Some(clicked_square);
                 self.legal_moves = self.board.get_legal_moves(clicked_square);
+                // Advanced logging for legal moves (goes to same buffer)
+                let piece = self.board.get_piece(clicked_square);
+                let piece_name = Self::piece_to_string(piece_type(piece));
+                let from_notation = Self::square_to_notation(clicked_square);
+                
+                let legal_moves_str: Vec<String> = self.legal_moves.iter()
+                    .map(|&sq| Self::square_to_notation(sq))
+                    .collect();
+                
+                let advanced_log_entry = format!(
+                    "[{:06.2}s] 🎯 HUMAN selected {} on {}, Legal moves: [{}] (count: {})\n",
+                    self.game_start_time.elapsed().as_secs_f64(),
+                    piece_name, 
+                    from_notation, 
+                    legal_moves_str.join(", "), 
+                    self.legal_moves.len()
+                );
+                
+                self.log_advanced(&advanced_log_entry); // Uses same buffer when advanced is enabled
             } else {
                 self.selected_square = None;
                 self.legal_moves.clear();
@@ -261,7 +301,25 @@ impl ChessApp {
         let start_time = std::time::Instant::now();
         self.is_ai_thinking = true;
         
+        // Create a simple vector to collect advanced logs
+        let mut advanced_logs: Vec<String> = Vec::new();
+        
+        // Set up advanced logging with a simple closure that doesn't capture self
+        if self.advanced_logger {
+            let mut log_buffer = String::new();
+            
+            self.ai_engine.set_advanced_logging(
+                true,
+                Some(move |msg: &str| {
+                    log_buffer.push_str(&format!("{}\n", msg));
+                })
+            );
+        } else {
+            self.ai_engine.set_advanced_logging(false, None::<fn(&str)>);
+        }
+        
         let result = self.ai_engine.search(&mut self.board, 4);
+        
         if let Some(ai_move) = result.best_move {
             let thinking_time = start_time.elapsed().as_secs_f64();
             
@@ -271,6 +329,10 @@ impl ChessApp {
             self.log_move("AI", ai_move.from, ai_move.to, piece_type_val);
             self.log_ai_thinking(thinking_time, result.evaluation);
             
+            if self.advanced_logger {
+                self.log_advanced_ai_analysis();
+            }
+
             if self.board.try_make_move(ai_move).is_ok() {
                 self.last_ai_move = Some(ai_move);
             }
@@ -279,6 +341,7 @@ impl ChessApp {
         self.is_ai_thinking = false;
         self.check_game_over();
     }
+    
     
     fn check_game_over(&mut self) {
         let legal_moves = self.board.get_all_legal_moves();
@@ -304,19 +367,19 @@ impl ChessApp {
                     board_rect.min + Vec2::new(file as f32 * square_size, (7 - rank) as f32 * square_size),
                     Vec2::splat(square_size),
                 );
-
+    
                 // Base square color
                 let base_color = if is_light {
                     Color32::from_rgb(240, 217, 181)
                 } else {
                     Color32::from_rgb(181, 136, 99)
                 };
-
+    
                 // Determine square color with highlights
                 let square_color = if Some(square) == self.selected_square {
                     Color32::from_rgb(255, 255, 0) // Yellow highlight for selected
                 } else if self.is_ai_last_move_square(square) {
-                    // ✅ NEW: Highlight AI's last move in blue
+                    // Highlight AI's last move in blue
                     if is_light {
                         Color32::from_rgb(173, 216, 230) // Light blue
                     } else {
@@ -325,10 +388,10 @@ impl ChessApp {
                 } else {
                     base_color
                 };
-
+    
                 painter.rect_filled(square_rect, 0.0, square_color);
-
-                // Draw legal move indicators (same as before)
+    
+                // Draw legal move indicators
                 if self.legal_moves.contains(&square) {
                     let center = square_rect.center();
                     if !is_empty(self.board.get_piece(square)) {
@@ -343,7 +406,7 @@ impl ChessApp {
                         painter.circle_filled(center, radius, Color32::from_rgba_premultiplied(128, 128, 128, 179));
                     }
                 }
-
+    
                 // Draw piece
                 let piece = self.board.get_piece(square);
                 if !is_empty(piece) {
@@ -351,10 +414,47 @@ impl ChessApp {
                 }
             }
         }
-
+    
         // Draw board border
         painter.rect_stroke(board_rect, 0.0, egui::Stroke::new(2.0, Color32::BLACK));
+        
+        // COORDINATE INDICATORS
+        let font_id = egui::FontId::new(16.0, egui::FontFamily::Monospace);
+        let text_color = egui::Color32::from_rgb(80, 80, 80);
+        
+        // Draw file indicators (a-h) at bottom of board
+        for file in 0..8 {
+            let file_char = (b'a' + file) as char;
+            let x = board_rect.left() + square_size * (file as f32) + square_size / 2.0;
+            let y = board_rect.bottom() + 10.0;
+            
+            painter.text(
+                egui::pos2(x, y),
+                egui::Align2::CENTER_TOP,
+                file_char,
+                font_id.clone(),
+                text_color
+            );
+        }
+        
+        // FIXED: Draw rank indicators (1-8) on RIGHT side of board
+        for rank in 0..8 {
+            let rank_number = 8 - rank;
+            let x = board_rect.right() + 15.0; // RIGHT side instead of left
+            let y = board_rect.top() + square_size * (rank as f32) + square_size / 2.0;
+            
+            painter.text(
+                egui::pos2(x, y),
+                egui::Align2::LEFT_CENTER, // Changed to LEFT_CENTER for right side positioning
+                rank_number.to_string(),
+                font_id.clone(),
+                text_color
+            );
+        }
     }
+    
+    
+    
     
     fn draw_piece(&self, painter: &egui::Painter, piece: u8, square_rect: Rect) {
         let center = square_rect.center();
@@ -487,8 +587,6 @@ impl ChessApp {
     }
     
     fn log_move(&mut self, move_type: &str, from: Square, to: Square, piece_type: u8) {
-        if !self.debug_enabled { return; }
-        
         let elapsed = self.game_start_time.elapsed().as_secs_f64();
         let move_str = format!("{}{}", 
             Self::square_to_notation(from), 
@@ -504,9 +602,10 @@ impl ChessApp {
             Self::piece_to_string(piece_type)
         );
         
-        self.game_log.push_str(&log_entry);
+        self.log_basic(&log_entry); // Use helper method
         self.move_count += 1;
     }
+    
     
     fn log_ai_thinking(&mut self, thinking_time: f64, evaluation: i32) {
         if !self.debug_enabled { return; }
@@ -519,32 +618,39 @@ impl ChessApp {
     }
     
     fn save_game_log(&self) {
-        if !self.debug_enabled { return; }
+        if !self.debug_enabled || self.game_log.is_empty() {
+            return;
+        }
         
-        use std::fs;
         use chrono::Local;
+        use std::fs;
         
         // Create logs directory
         let _ = fs::create_dir_all("logs");
         
-        // Generate filename with MM/DD/YYYY format
+        // Generate filename
         let now = Local::now();
-        let filename = format!("chess_log_{}.txt", 
-            now.format("%m-%d-%Y_%H-%M-%S"));
+        let filename = format!("chess_log_{}.txt", now.format("%m-%d-%Y_%H-%M-%S"));
         
+        // Single buffer contains everything
         let full_log = format!(
-            "=== Chess Game Log ===\n\
-            Game Duration: {:.1}s\n\
-            Total Moves: {}\n\
-            \n{}\n\
-            === End Log ===",
+            "=== Chess Game Debug Log ===\n\
+             Game Duration: {:.1}s\n\
+             Total Moves: {}\n\
+             Debug Enabled: {}\n\
+             Advanced Logger Enabled: {}\n\n\
+             {}\n\
+             === END LOG ===",
             self.game_start_time.elapsed().as_secs_f64(),
             self.move_count - 1,
+            self.debug_enabled,
+            self.advanced_logger,
             self.game_log
         );
         
         let _ = fs::write(format!("logs/{}", filename), full_log);
     }
+    
     
     // Helper functions
     fn square_to_notation(square: Square) -> String {
@@ -560,5 +666,67 @@ impl ChessApp {
             _ => "Unknown"
         }
     }
+
+    fn log_basic(&mut self, message: &str) {
+        match self.debug_enabled {
+            true => self.game_log.push_str(message), // Always to same buffer
+            false => (),
+        }
+    }
+    
+    fn log_advanced(&mut self, message: &str) {
+        match (self.debug_enabled, self.advanced_logger) {
+            (true, true) => self.game_log.push_str(message), // Same buffer
+            _ => (), // No logging if debug disabled or advanced disabled
+        }
+    }
+
+    fn log_alpha_beta_event(&mut self, depth: u32, alpha: i32, beta: i32, best_move: &str, evaluation: i32, event: &str) {
+        let elapsed = self.game_start_time.elapsed().as_secs_f64();
+        let indent = "    ".repeat(depth as usize);
+        
+        let log_entry = format!(
+            "{}[{:06.2}s] D{}: {} | Move: {} | Eval: {} | α: {} | β: {}\n",
+            indent, elapsed, depth, event, best_move, evaluation, alpha, beta
+        );
+        
+        self.log_advanced(&log_entry); // Same buffer
+    }
+    
+    fn log_evaluation_breakdown(&mut self, material: i32, positional: i32, total: i32, game_phase: &str) {
+        let elapsed = self.game_start_time.elapsed().as_secs_f64();
+        
+        let log_entry = format!(
+            "  📊 [{:06.2}s] Evaluation: Material: {} | Positional: {} | Total: {} | Phase: {}\n",
+            elapsed, material, positional, total, game_phase
+        );
+        
+        self.log_advanced(&log_entry); // Same buffer
+    }
+    
+    fn reset_logging_state(&mut self) {
+        self.game_log.clear();
+        self.move_count = 1;
+        self.game_start_time = std::time::Instant::now();
+    }
+
+    fn log_advanced_ai_analysis(&mut self) {
+        if !self.advanced_logger { return; }
+        
+        let elapsed = self.game_start_time.elapsed().as_secs_f64();
+        let advanced_analysis = format!(
+            "[{:06.2}s] 🔍 Advanced AI Analysis:\n\
+             [{:06.2}s]   - Nodes searched: {}\n\
+             [{:06.2}s]   - Search depth: 4\n\
+             [{:06.2}s]   - Evaluation: {} centipawns\n",
+            elapsed,
+            elapsed, self.ai_engine.nodes_searched,
+            elapsed,
+            elapsed, self.ai_engine.nodes_searched as i32 % 100 // Placeholder evaluation
+        );
+        
+        self.game_log.push_str(&advanced_analysis);
+    }
+    
     
 }

@@ -50,79 +50,35 @@ impl Board {
 
     /// Get legal moves for a piece at the given square
     pub fn get_legal_moves(&self, square: Square) -> Vec<Square> {
-        // Get pseudo-legal moves first
-        let pseudo_moves = self.get_pseudo_legal_moves(square);
-        
-        // Check if our king is in check
-        let our_color = self.current_turn;
-        let king_square = match self.find_king(our_color) {
-            Some(square) => square,
-            None => return Vec::new(), // No king found
-        };
-        
-        let opponent_color = opposite_color(our_color);
-        let checking_pieces = self.find_checking_pieces(king_square, opponent_color);
-        
-        match checking_pieces.len() {
-            0 => {
-                // Not in check, but still need to validate king moves
-                let piece = self.get_piece(square);
-                if piece_type(piece) == KING {
-                    *self.ignore_square_for_threats.borrow_mut() = Some(square);
-                    let filtered_moves = self.filter_king_moves_in_check(pseudo_moves, opponent_color);
-                    *self.ignore_square_for_threats.borrow_mut() = None;
-                    filtered_moves
-                } else {
-                    pseudo_moves
-                }
-            }
-            1 => {
-                // Single check - can block or capture
-                let checking_piece_square = checking_pieces[0];
-                let blocking_squares = self.get_blocking_squares(king_square, checking_piece_square);
-                let piece = self.get_piece(square);
-                
-                if piece_type(piece) == KING {
-                    *self.ignore_square_for_threats.borrow_mut() = Some(square);
-                    let filtered_moves = self.filter_king_moves_in_check(pseudo_moves, opponent_color);
-                    *self.ignore_square_for_threats.borrow_mut() = None;
-                    filtered_moves
-                } else {
-                    // ✅ FIX: Handle en passant moves specially during check resolution
-                    pseudo_moves.into_iter()
-                        .filter(|&mv| {
-                            // Normal case: move blocks or captures checking piece
-                            if blocking_squares.contains(&mv) {
-                                return true;
-                            }
-                            
-                            // ✅ SPECIAL CASE: En passant that removes the checking piece
-                            if self.is_en_passant_move(Move::new(square, mv)) {
-                                // Check if this en passant removes the checking piece
-                                if let Some(en_passant_pawn_square) = self.en_passant_pawn {
-                                    return en_passant_pawn_square == checking_piece_square;
-                                }
-                            }
-                            
-                            false
-                        })
-                        .collect()
-                }
-            }
-            _ => {
-                // Double check - only king moves are legal
-                let piece = self.get_piece(square);
-                if piece_type(piece) == KING {
-                    *self.ignore_square_for_threats.borrow_mut() = Some(square);
-                    let filtered_moves = self.filter_king_moves_in_check(pseudo_moves, opponent_color);
-                    *self.ignore_square_for_threats.borrow_mut() = None;
-                    filtered_moves
-                } else {
-                    Vec::new()
-                }
-            }
+        let piece = self.get_piece(square);
+        if is_empty(piece) {
+            return Vec::new();
         }
+
+        // Only generate moves for current player's pieces
+        if !is_piece_color(piece, self.current_turn) {
+            return Vec::new();
+        }
+
+        let piece_type_val = piece_type(piece);
+        
+        // Get pseudo-legal moves
+        let pseudo_legal_moves = self.get_pseudo_legal_moves(square);
+        
+        // Filter for truly legal moves (don't leave king in check)
+        let legal_moves: Vec<Square> = pseudo_legal_moves
+            .into_iter()
+            .filter(|&target| {
+                let mv = Move::new(square, target);
+                // Use the existing validation functions
+                self.is_valid_move(mv) && !self.would_king_be_in_check_after_move(mv)
+            })
+            .collect();
+        
+        legal_moves
     }
+
+    
     
     /// Get pseudo-legal moves (before checking for check/pins)
     pub fn get_pseudo_legal_moves(&self, square: Square) -> Vec<Square> {
@@ -294,12 +250,18 @@ impl Board {
     fn get_king_moves(&self, square: Square) -> Vec<Square> {
         let source_color = piece_color(self.get_piece(square));
         
-        // OPTIMIZED: Use pre-computed king attack mask instead of nested loops
+        // OPTIMIZED: Use pre-computed king attack mask
         let king_attack_mask = get_king_attacks(square.0);
         
         // Filter out squares occupied by our own pieces
         let our_pieces = self.bitboards.get_all_pieces(source_color);
         let valid_moves = king_attack_mask & !our_pieces;
+        
+        // ADD DEBUG: Log what the king can see
+        println!("DEBUG: King on {} sees attack mask: {:064b}", 
+            Self::square_to_notation(square), king_attack_mask);
+        println!("DEBUG: Our pieces mask: {:064b}", our_pieces);
+        println!("DEBUG: Valid moves mask: {:064b}", valid_moves);
         
         // Convert bitboard to squares
         let mut moves = Vec::new();
@@ -307,25 +269,21 @@ impl Board {
         
         while remaining_moves != 0 {
             let square_index = remaining_moves.trailing_zeros() as u8;
-            moves.push(index_to_square(square_index));
-            remaining_moves &= remaining_moves - 1; // Remove the processed bit
+            let target_square = index_to_square(square_index);
+            
+            // ADD DEBUG: Check what's on each target square
+            let target_piece = self.get_piece(target_square);
+            println!("DEBUG: Target square {} has piece: {:?}", 
+                Self::square_to_notation(target_square), target_piece);
+            
+            moves.push(target_square);
+            remaining_moves &= remaining_moves - 1;
         }
         
-        // Add castling moves (unchanged - castling logic remains the same)
-        if self.can_castle(source_color, true) {
-            // Kingside castling
-            let king_rank = square.rank();
-            moves.push(Square::new(6, king_rank)); // g1 or g8
-        }
-
-        if self.can_castle(source_color, false) {
-            // Queenside castling
-            let king_rank = square.rank();
-            moves.push(Square::new(2, king_rank)); // c1 or c8
-        }
-
+        println!("DEBUG: King moves generated: {}", moves.len());
         moves
     }
+    
 
 
     /// Generate sliding piece moves in given directions

@@ -1,0 +1,27 @@
+=== Chess Game Debug Log ===
+Game Duration: 1118.4s
+Total Moves: 12
+Debug Enabled: true
+Advanced Logger Enabled: false
+
+[1093.67s] Move 1: HUMAN played g1f3 (Knight)
+[1093.68s] Move 2: AI played g8f6 (Knight)
+  AI thinking time: 0.000s, Evaluation: -4 cp
+[1094.98s] Move 3: HUMAN played b1c3 (Knight)
+[1095.00s] Move 4: AI played b8c6 (Knight)
+  AI thinking time: 0.000s, Evaluation: -2 cp
+[1098.41s] Move 5: HUMAN played e2e4 (Pawn)
+[1098.43s] Move 6: AI played f6g4 (Knight)
+  AI thinking time: 0.000s, Evaluation: 6 cp
+[1100.27s] Move 7: HUMAN played d2d4 (Pawn)
+[1100.28s] Move 8: AI played c6a5 (Knight)
+  AI thinking time: 0.000s, Evaluation: 7 cp
+[1103.62s] Move 9: HUMAN played c1d2 (Bishop)
+[1103.65s] Move 10: AI played g4f2 (Knight)
+  AI thinking time: 0.000s, Evaluation: 452 cp
+[1115.38s] Move 11: HUMAN played f1d3 (Bishop)
+[1115.85s] Move 12: AI played f2d1 (Knight)
+  AI thinking time: 0.454s, Evaluation: 694 cp
+[1118.38s] === Game finished abruptly (New Game pressed) ===
+
+=== END LOG ===

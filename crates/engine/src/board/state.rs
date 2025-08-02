@@ -25,7 +25,7 @@ impl Board {
         let is_en_passant = self.is_en_passant_move(mv);
     
         // THEN clear en passant target for next move
-        let old_en_passant = self.en_passant_target;
+
         self.en_passant_target = None;
         self.en_passant_pawn = None;
     

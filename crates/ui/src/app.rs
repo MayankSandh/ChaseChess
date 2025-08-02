@@ -3,6 +3,9 @@ use engine::{Board, Move, Square, piece_type, piece_color, is_empty}; // Removed
 use engine::{PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, WHITE, BLACK};
 use ai::SearchEngine;
 use std::time::Instant;
+use engine::ChessLogger;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 // Add these lines after your imports
 const FILES: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
@@ -23,7 +26,8 @@ pub struct ChessApp {
     promotion_pending: Option<PendingPromotion>,
     show_promotion_dialog: bool,
     move_history: Vec<Move>,     
-    redo_history: Vec<Move>,    
+    redo_history: Vec<Move>,
+    logger: Rc<RefCell<ChessLogger>>,    
 }
 
 #[derive(Clone, Debug)]
@@ -37,22 +41,35 @@ impl ChessApp {
 
     pub fn new() -> Self {
         engine::bitboard::initialize_engine();
+        
+        let logger = Rc::new(RefCell::new(ChessLogger::new()));
+        let mut board = Board::new();
+        board.set_logger(logger.clone());
+        
+        let mut ai_engine = SearchEngine::new();
+        ai_engine.set_logger(logger.clone());
+        
+        // Test that logging works
+        logger.borrow_mut().log("🎮 Chess application initialized successfully");
+        
         Self {
-            board: Board::new(),
+            board,
             selected_square: None,
             legal_moves: Vec::new(),
-            ai_engine: SearchEngine::new(),
+            ai_engine,
             ai_enabled: true,
             is_ai_thinking: false,
-            ai_move_scheduled: None,  
+            ai_move_scheduled: None,
             last_ai_move: None,
             game_over: false,
             promotion_pending: None,
             show_promotion_dialog: false,
             move_history: Vec::new(),
             redo_history: Vec::new(),
+            logger,
         }
     }
+    
 
 
     fn is_ai_last_move_square(&self, square: Square) -> bool {
@@ -71,6 +88,16 @@ impl eframe::App for ChessApp {
             
             // Status display
             ui.horizontal(|ui| {
+
+                let mut advanced_logging = self.logger.borrow().advanced_logging;
+                if ui.checkbox(&mut advanced_logging, "Advanced Logging").changed() {
+                    if advanced_logging {
+                        self.logger.borrow_mut().enable_advanced_logging();
+                    } else {
+                        self.logger.borrow_mut().disable_advanced_logging();
+                    }
+                }
+
                 let current_player = if self.board.current_turn == WHITE { "White" } else { "Black" };
                 let status = if self.game_over {
                     "Game Over".to_string()
@@ -99,7 +126,20 @@ impl eframe::App for ChessApp {
                 // Push New Game button to the right
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("New Game").clicked() {
-                        self.board = Board::new();
+                        // Save current game log
+                        if let Ok(filename) = self.logger.borrow_mut().save_to_file("New game button pressed") {
+                            println!("Game log saved to: {}", filename);
+                        }
+                        
+                        // Create new logger
+                        let new_logger = std::rc::Rc::new(std::cell::RefCell::new(engine::ChessLogger::new()));
+                        
+                        // Reset everything
+                        let mut new_board = Board::new();
+                        new_board.set_logger(new_logger.clone());
+                        
+                        self.board = new_board;
+                        self.ai_engine.set_logger(new_logger.clone());
                         self.selected_square = None;
                         self.legal_moves.clear();
                         self.last_ai_move = None;
@@ -110,7 +150,12 @@ impl eframe::App for ChessApp {
                         self.show_promotion_dialog = false;
                         self.move_history.clear();
                         self.redo_history.clear();
+                        
+                        // Update logger reference
+                        self.logger = new_logger;
                     }
+                    
+                    
 
                     // ADD: Redo button
                     if ui.add_enabled(self.can_redo(), egui::Button::new("Redo")).clicked() {
@@ -124,6 +169,20 @@ impl eframe::App for ChessApp {
                 });
             });
             
+            // ADD: Logger status display
+            ui.horizontal(|ui| {
+                let log_status = if self.logger.borrow().advanced_logging {
+                    "🔬 Advanced Logging: ON"
+                } else {
+                    "📊 Basic Logging: ON"
+                };
+                ui.label(log_status);
+                
+                ui.separator();
+                
+                ui.label(format!("Moves logged: {}", self.move_history.len()));
+            });
+
             let available_size = ui.available_size();
             let board_size = (available_size.x.min(available_size.y) - 80.0).max(400.0);
             let square_size = board_size / 8.0;
@@ -170,6 +229,18 @@ impl eframe::App for ChessApp {
         }
         self.show_promotion_dialog(ctx);
     }
+
+    // ADD this new method to handle app shutdown
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // Save log when app is closed
+        if !self.game_over {
+            self.logger.borrow_mut().log_game_aborted("Application closed");
+        }
+        
+        if let Ok(filename) = self.logger.borrow_mut().save_to_file("Application shutdown") {
+            println!("📁 Final game log saved to: {}", filename);
+        }
+    }
 }
 
 
@@ -215,7 +286,12 @@ impl ChessApp {
                     }
                 }
                 let mv = Move::new(selected, clicked_square);
+                let start_time = std::time::Instant::now();
                 if self.board.try_make_move(mv).is_ok() {
+                    let move_time = start_time.elapsed().as_millis() as u64;
+                    
+                    // LOG: Human move
+                    self.logger.borrow_mut().log_human_move(mv, move_time);
 
                     self.move_history.push(mv);
                     self.redo_history.clear();
@@ -249,33 +325,52 @@ impl ChessApp {
         if self.game_over {
             return;
         }
-        
-        
+    
         self.is_ai_thinking = true;
-        
+        let start_time = std::time::Instant::now();
         let result = self.ai_engine.search(&mut self.board, 4);
-        
+        let search_time = start_time.elapsed().as_millis() as u64;
+    
         if let Some(ai_move) = result.best_move {
-            
             if self.board.try_make_move(ai_move).is_ok() {
+                // LOG: AI move
+                self.logger.borrow_mut().log_ai_move(ai_move, search_time, result.evaluation);
+                
+                // Track AI move in history and clear redo stack
                 self.move_history.push(ai_move);
                 self.redo_history.clear();
-
+                
                 self.last_ai_move = Some(ai_move);
-            } 
-        } 
-        
+            }
+        }
         self.is_ai_thinking = false;
         self.check_game_over();
     }
+    
     
     
     fn check_game_over(&mut self) {
         let legal_moves = self.board.get_all_legal_moves();
         if legal_moves.is_empty() {
             self.game_over = true;
+            
+            // Determine game result and save log
+            let result = if self.board.is_in_check() {
+                let winner = if self.board.current_turn == engine::WHITE { "Black" } else { "White" };
+                format!("Checkmate - {} wins!", winner)
+            } else {
+                "Stalemate - Draw".to_string()
+            };
+            
+            self.logger.borrow_mut().log(&format!("🏁 Game Over: {}", result));
+            
+            // Save game log
+            if let Ok(filename) = self.logger.borrow_mut().save_to_file(&result) {
+                println!("✅ Game log saved to: {}", filename);
+            }
         }
     }
+    
     
     fn draw_board(&self, ui: &mut egui::Ui, board_rect: Rect, square_size: f32) {
         let painter = ui.painter();
@@ -520,6 +615,8 @@ impl ChessApp {
         if let Some(last_move) = self.move_history.pop() {
             // Use your existing undo function
             if self.board.undo_move().is_ok() {
+                // LOG: Undo
+                self.logger.borrow_mut().log_undo(last_move);
                 // Move the undone move to redo stack
                 self.redo_history.push(last_move);
                 
@@ -538,6 +635,8 @@ impl ChessApp {
     fn redo_move(&mut self) {
         if let Some(redo_move) = self.redo_history.pop() {
             if self.board.try_make_move(redo_move).is_ok() {
+                // LOG: Redo
+                self.logger.borrow_mut().log_redo(redo_move);
                 // Move back to move history
                 self.move_history.push(redo_move);
                 

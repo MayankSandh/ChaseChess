@@ -6,6 +6,7 @@ pub mod validation;
 pub mod state;
 pub mod debug;
 use crate::bitboard::BitboardManager; 
+use crate::ChessLogger;
 
 
 #[derive(Debug, Clone)]
@@ -21,6 +22,7 @@ pub struct Board {
     pub en_passant_pawn: Option<Square>,
     pub ignore_square_for_threats: RefCell<Option<Square>>,
     pub bitboards: BitboardManager,
+    pub logger: Option<std::rc::Rc<std::cell::RefCell<ChessLogger>>>,
 }
 
 impl Board {
@@ -40,6 +42,7 @@ impl Board {
             en_passant_pawn: None,
             ignore_square_for_threats: RefCell::new(None),
             bitboards: BitboardManager::new(),
+            logger: None,
         };
 
         board.setup_starting_position();
@@ -115,7 +118,8 @@ impl Board {
             en_passant_target: None,
             en_passant_pawn: None,
             ignore_square_for_threats: RefCell::new(None),   
-            bitboards: crate::bitboard::BitboardManager::new(),         
+            bitboards: crate::bitboard::BitboardManager::new(),      
+            logger: None,   
         };
 
         // Parse piece placement (part 0)
@@ -282,7 +286,9 @@ impl Board {
         println!("✅ Bitboard synchronization check PASSED");
         true
     }
-
+    pub fn set_logger(&mut self, logger: std::rc::Rc<std::cell::RefCell<crate::ChessLogger>>) {
+        self.logger = Some(logger);
+    }
 }
 
 impl Default for Board {
@@ -367,5 +373,9 @@ mod tests {
         assert_eq!(checking_pieces[0], black_knight_square, "Should find the knight on d3");
         
         println!("✅ Knight check detection test PASSED!");
+    }
+
+    pub fn set_logger(&mut self, logger: std::rc::Rc<std::cell::RefCell<ChessLogger>>) {
+        self.logger = Some(logger);
     }
 }

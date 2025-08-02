@@ -1,45 +1,88 @@
 use engine::{Board, types::*};
-use crate::types::*;
 use crate::piece_square_tables::*;
-use engine::bitboard::*;
+use crate::types::*;
+use std::sync::OnceLock;
 
-static mut PST: Option<PreCalculatedPST> = None;
+static PST: OnceLock<PreCalculatedPST> = OnceLock::new();
 
-// Initialize PST once
-pub fn initialize_pst() {
-    unsafe {
-        if PST.is_none() {
-            PST = Some(PreCalculatedPST::new());
-        }
-    }
+fn get_pst() -> &'static PreCalculatedPST {
+    PST.get_or_init(|| PreCalculatedPST::new())
 }
 
 pub fn evaluate_position(board: &Board) -> i32 {
-    // Ensure PST is initialized
-    unsafe {
-        if PST.is_none() {
-            initialize_pst();
-        }
-    }
-    
     let legal_moves = board.get_all_legal_moves();
     if legal_moves.is_empty() {
-        return if board.is_in_check() {
-            -MATE_SCORE
-        } else {
-            DRAW_SCORE
-        };
+        return if board.is_in_check() { -MATE_SCORE } else { DRAW_SCORE };
     }
 
     let mut score = 0;
-
-    // Material evaluation
-    score += evaluate_material(board);
+    let material_score = evaluate_material(board);
+    score += material_score;
     
-    // Positional evaluation with PST
-    // score += evaluate_position_with_pst(board);
+    // Uncomment this for PST evaluation
+    let pst_score = evaluate_position_with_pst(board);
+    score += pst_score;
+
+    // LOG: Detailed evaluation if logger is available
+    if let Some(logger_ref) = &board.logger {
+        let material_white = calculate_material_for_color(board, engine::WHITE);
+        let material_black = calculate_material_for_color(board, engine::BLACK);
+        let game_phase = crate::piece_square_tables::calculate_game_phase(board);
+        
+        // Check for game phase transitions
+        logger_ref.borrow_mut().check_and_log_phase_transition(game_phase, "position evaluation");
+        
+        // Log detailed breakdown using safe methods
+        logger_ref.borrow_mut().log_evaluation_breakdown_safe(
+            material_white, material_black, pst_score, game_phase, score
+        );
+        
+        // Log raw PST values if advanced logging using safe method
+        logger_ref.borrow_mut().log_raw_pst_breakdown_safe(board);
+        
+        // Log endgame pattern if detected
+        let pattern = crate::piece_square_tables::detect_endgame_pattern(board);
+        match pattern {
+            crate::piece_square_tables::EndgamePattern::KQvsK => {
+                logger_ref.borrow_mut().log_endgame_pattern("KQvsK", "Using specialized King+Queen vs King tables");
+            },
+            crate::piece_square_tables::EndgamePattern::KRvsK => {
+                logger_ref.borrow_mut().log_endgame_pattern("KRvsK", "Using specialized King+Rook vs King tables");
+            },
+            crate::piece_square_tables::EndgamePattern::PawnEndgame => {
+                logger_ref.borrow_mut().log_endgame_pattern("PawnEndgame", "Pawn promotion priority");
+            },
+            crate::piece_square_tables::EndgamePattern::RookEndgame => {
+                logger_ref.borrow_mut().log_endgame_pattern("RookEndgame", "Rook activity and pawn support");
+            },
+            _ => {}, // Don't log opening/middlegame patterns
+        }
+    }
 
     score
+}
+
+// Add this helper function
+fn calculate_material_for_color(board: &Board, color: u8) -> i32 {
+    let mut material = 0;
+    for rank in 0..8 {
+        for file in 0..8 {
+            let square = engine::Square::new(file, rank);
+            let piece = board.get_piece(square);
+            if !engine::is_empty(piece) && engine::piece_color(piece) == color {
+                material += match engine::piece_type(piece) {
+                    engine::PAWN => 100,
+                    engine::KNIGHT => 300,
+                    engine::BISHOP => 300,
+                    engine::ROOK => 500,
+                    engine::QUEEN => 900,
+                    engine::KING => 0,
+                    _ => 0,
+                };
+            }
+        }
+    }
+    material
 }
 
 fn evaluate_material(board: &Board) -> i32 {
@@ -64,47 +107,42 @@ fn evaluate_material(board: &Board) -> i32 {
 }
 
 fn evaluate_position_with_pst(board: &Board) -> i32 {
-    unsafe {
-        let pst = PST.as_ref().unwrap();
-        let pattern = detect_endgame_pattern(board);
-        let phase = calculate_game_phase(board);
-        let mut score = 0;
-        
-        // OPTIMIZED: Replace nested loops with bitboard iteration
-        let piece_types = [PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING];
-        
-        for piece_type in piece_types {
-            if piece_type >= 1 && piece_type <= 6 {
-                let piece_index = (piece_type - 1) as usize;
-                
-                // Process white pieces of this type - only iterate over actual pieces
-                let white_pieces = board.bitboards.find_pieces(WHITE, piece_type);
-                for square in white_pieces {
-                    let rank = square.0 / 8;
-                    let file = square.0 % 8;
-                    let square_index = (rank * 8 + file) as usize;
-                    let pst_value = pst.get_value(piece_index, pattern, phase, square_index);
-                    
-                    score += (2 * (board.current_turn == WHITE) as i32 - 1) * pst_value;
-                }
-                
-                // Process black pieces of this type - only iterate over actual pieces
-                let black_pieces = board.bitboards.find_pieces(BLACK, piece_type);
-                for square in black_pieces {
-                    let rank = square.0 / 8;
-                    let file = square.0 % 8;
-                    let square_index = ((7 - rank) * 8 + file) as usize; // Flip vertically for black
-                    let pst_value = pst.get_value(piece_index, pattern, phase, square_index);
-                    
-                    score -= (2 * (board.current_turn == WHITE) as i32 - 1) * pst_value;
-                }
+    let pst = get_pst();
+    let pattern = detect_endgame_pattern(board);
+    let phase = calculate_game_phase(board);
+    let mut score = 0;
+
+    // OPTIMIZED: Replace nested loops with bitboard iteration
+    let piece_types = [PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING];
+    
+    for piece_type in piece_types {
+        if piece_type >= 1 && piece_type <= 6 {
+            let piece_index = (piece_type - 1) as usize;
+            
+            // Process white pieces of this type - only iterate over actual pieces
+            let white_pieces = board.bitboards.find_pieces(WHITE, piece_type);
+            for square in white_pieces {
+                let rank = square.0 / 8;
+                let file = square.0 % 8;
+                let square_index = (rank * 8 + file) as usize;
+                let pst_value = pst.get_value(piece_index, pattern, phase, square_index);
+                score += (2 * (board.current_turn == WHITE) as i32 - 1) * pst_value;
+            }
+            
+            // Process black pieces of this type - only iterate over actual pieces
+            let black_pieces = board.bitboards.find_pieces(BLACK, piece_type);
+            for square in black_pieces {
+                let rank = square.0 / 8;
+                let file = square.0 % 8;
+                let square_index = ((7 - rank) * 8 + file) as usize; // Flip vertically for black
+                let pst_value = pst.get_value(piece_index, pattern, phase, square_index);
+                score -= (2 * (board.current_turn == WHITE) as i32 - 1) * pst_value;
             }
         }
-        
-        score
     }
+    
+    score
 }
-
 
 fn get_enemy_king_penalty(_board: &Board, pattern: EndgamePattern, enemy_king_square: usize) -> i32 {
     match pattern {
@@ -131,4 +169,3 @@ fn get_enemy_king_penalty(_board: &Board, pattern: EndgamePattern, enemy_king_sq
         _ => 0,
     }
 }
-

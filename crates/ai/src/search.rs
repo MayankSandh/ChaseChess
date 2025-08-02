@@ -1,19 +1,22 @@
 use engine::{Board, Move};
 use crate::{evaluation::*, types::*};
 use crate::transposition::*;
-use crate::piece_square_tables::initialize_pst;
+use crate::piece_square_tables::get_pst;
+
 
 pub struct SearchEngine {
     pub nodes_searched: u64,
     transposition_table: TranspositionTable,
+    logger: Option<std::rc::Rc<std::cell::RefCell<engine::ChessLogger>>>,
 }
 
 impl SearchEngine {
     pub fn new() -> Self {
-        initialize_pst();
+        get_pst();
         Self { 
             nodes_searched: 0,
-            transposition_table: TranspositionTable::new(64), // 64MB transposition table
+            transposition_table: TranspositionTable::new(64), 
+            logger: None,
         }
     }
 
@@ -41,25 +44,47 @@ impl SearchEngine {
     
         // Order moves for better alpha-beta efficiency
         self.order_moves(board, &mut moves);
+
+        if let Some(logger) = &self.logger {
+            logger.borrow_mut().log_search_start(depth as u32, moves.len());
+        }
     
         let mut best_score = -MATE_SCORE - 1;
         let mut best_move = None;
         let mut alpha = -MATE_SCORE - 1;
         let beta = MATE_SCORE + 1;
     
-        for &mv in &moves {
+        for (move_num, &mv) in moves.iter().enumerate() {
             if let Ok(_) = board.try_make_move(mv) {
                 let score = -self.alphabeta(board, depth - 1, -beta, -alpha);
                 if let Err(_) = board.undo_move() { break; }
                 
+                // LOG: Move analysis
+                if let Some(logger) = &self.logger {
+                    logger.borrow_mut().log_move_analysis(mv, move_num + 1, moves.len(), score);
+                }
+                
                 if score > best_score {
                     best_score = score;
                     best_move = Some(mv);
+                    
+                    // LOG: Alpha improvement 
+                    if let Some(logger) = &self.logger {
+                        if score > alpha {
+                            logger.borrow_mut().log_alpha_change(alpha, score, mv);
+                        }
+                    }
                 }
                 
                 alpha = alpha.max(score);
             }
         }
+        
+        // LOG: Search complete
+        if let Some(logger) = &self.logger {
+            logger.borrow_mut().log_search_complete(best_move, best_score, self.nodes_searched);
+        }
+        
     
         (best_move, best_score)
     }
@@ -70,9 +95,14 @@ impl SearchEngine {
         
         // Probe transposition table
         let hash = self.transposition_table.get_hash(board);
-        if let Some((tt_score, _tt_move)) = self.transposition_table.probe(hash, depth, alpha, beta) {
+        if let Some((tt_score, tt_move)) = self.transposition_table.probe(hash, depth, alpha, beta) {
+            // LOG: Transposition table hit
+            if let Some(logger) = &self.logger {
+                logger.borrow_mut().log_tt_hit(depth, depth, tt_score, tt_move);
+            }
             return tt_score;
         }
+
     
         if depth <= 0 {
             // Call quiescence search instead of static evaluation
@@ -104,9 +134,14 @@ impl SearchEngine {
                 }
                 
                 if alpha >= beta {
+                    // LOG: Beta cutoff
+                    if let Some(logger) = &self.logger {
+                        logger.borrow_mut().log_beta_cutoff(beta, score, mv);
+                    }
                     self.transposition_table.store(hash, depth, beta, best_move, NodeType::LowerBound);
                     return beta;
                 }
+                
             }
         }
         
@@ -202,7 +237,9 @@ impl SearchEngine {
             .collect()
     }
     
-
+    pub fn set_logger(&mut self, logger: std::rc::Rc<std::cell::RefCell<engine::ChessLogger>>) {
+        self.logger = Some(logger);
+    }
 }
 
 impl Default for SearchEngine {

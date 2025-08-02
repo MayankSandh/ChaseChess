@@ -1,24 +1,29 @@
 use engine::{Board, types::*};
-use std::sync::Once;
+use std::sync::OnceLock;
 
-static INIT: Once = Once::new();
+static PST: OnceLock<PreCalculatedPST> = OnceLock::new();
 
-pub fn initialize_pst() {
-    INIT.call_once(|| {
-        // This ensures PST is initialized only once
-        // The actual initialization happens when PreCalculatedPST::new() is called
-    });
-}
 
 pub fn get_pst() -> &'static PreCalculatedPST {
-    unsafe {
-        static mut PST: Option<PreCalculatedPST> = None;
-        INIT.call_once(|| {
-            PST = Some(PreCalculatedPST::new());
-        });
-        PST.as_ref().unwrap()
-    }
+    println!("🔧 get_pst() ENTRY");
+    
+    let result = PST.get_or_init(|| {
+        println!("🔧 PST.get_or_init() CLOSURE START");
+        
+        let mut pst = PreCalculatedPST {
+            tables: Box::new([[[[0; 64]; 16]; 9]; 6]),
+        };
+        
+        println!("🔧 PST struct created");
+        pst.calculate_all_tables();
+        println!("🔧 calculate_all_tables() COMPLETE");
+        pst
+    });
+    
+    println!("🔧 get_pst() EXIT");
+    result
 }
+
 
 // Game phase buckets - 16 for higher precision (0-255 scale)
 const PHASE_BUCKETS: [u8; 16] = [0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240];
@@ -196,13 +201,13 @@ const KR_VS_K_ROOK: [i32; 64] = [
 
 pub struct PreCalculatedPST {
     // [piece_type][pattern][phase_bucket][square]
-    tables: [[[[i32; 64]; 16]; 9]; 6],
+    tables: Box<[[[[i32; 64]; 16]; 9]; 6]>,
 }
 
 impl PreCalculatedPST {
     pub fn new() -> Self {
         let mut pst = PreCalculatedPST {
-            tables: [[[[0; 64]; 16]; 9]; 6],
+            tables: Box::new([[[[0; 64]; 16]; 9]; 6]),
         };
         
         pst.calculate_all_tables();

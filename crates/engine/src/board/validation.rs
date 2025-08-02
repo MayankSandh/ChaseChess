@@ -384,10 +384,37 @@ impl Board {
 
     /// Filter king moves when in check
     pub fn filter_king_moves_in_check(&self, moves: Vec<Square>, opponent_color: u8) -> Vec<Square> {
-        moves.into_iter()
-            .filter(|&square| !self.is_under_threat(square, opponent_color))
-            .collect()
+        println!("🔍 THREAT FILTERING DEBUG");
+        println!("  Filtering {} king moves against {} threats", moves.len(), 
+                 if opponent_color == WHITE { "WHITE" } else { "BLACK" });
+        
+        let filtered: Vec<Square> = moves.into_iter()
+            .filter(|&square| {
+                let is_safe = !self.is_under_threat(square, opponent_color);
+                println!("    {:?} -> {}", square, if is_safe { "SAFE" } else { "UNDER THREAT" });
+                if !is_safe {
+                    println!("      Threat details for {:?}:", square);
+                    if self.check_sliding_threats(square, opponent_color) {
+                        println!("        - Sliding piece threat detected");
+                    }
+                    if self.check_knight_threats(square, opponent_color) {
+                        println!("        - Knight threat detected");  
+                    }
+                    if self.check_pawn_threats(square, opponent_color) {
+                        println!("        - Pawn threat detected");
+                    }
+                    if self.check_king_threats(square, opponent_color) {
+                        println!("        - King threat detected");
+                    }
+                }
+                is_safe
+            })
+            .collect();
+        
+        println!("  Final filtered moves: {} remaining", filtered.len());
+        filtered
     }
+    
 
     /// Filter moves to escape check (for non-king pieces)
     pub fn filter_moves_to_escape_check(&self, _square: Square, moves: Vec<Square>, checking_piece_square: Square) -> Vec<Square> {

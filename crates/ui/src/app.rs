@@ -29,6 +29,7 @@ struct PendingPromotion {
 impl ChessApp {
 
     pub fn new() -> Self {
+        engine::bitboard::initialize_engine();
         Self {
             board: Board::new(),
             selected_square: None,
@@ -204,10 +205,22 @@ impl ChessApp {
                     
                     self.check_game_over();
                 }
-            } else if !is_empty(self.board.get_piece(clicked_square)) && 
-                     piece_color(self.board.get_piece(clicked_square)) == self.board.current_turn {
+            } else if !is_empty(self.board.get_piece(clicked_square)) &&
+                        piece_color(self.board.get_piece(clicked_square)) == self.board.current_turn {
+                
                 self.selected_square = Some(clicked_square);
                 self.legal_moves = self.board.get_legal_moves(clicked_square);
+                
+                // DEBUG: Print what moves the UI received
+                let piece = self.board.get_piece(clicked_square);
+                if piece_type(piece) == KING {
+                    println!("🔍 UI MOVE DISPLAY DEBUG");
+                    println!("  Selected king at: {:?}", clicked_square);
+                    println!("  UI received {} legal moves:", self.legal_moves.len());
+                    for (i, mv) in self.legal_moves.iter().enumerate() {
+                        println!("    [{}] {:?}", i, mv);
+                    }
+                }
             } else {
                 self.selected_square = None;
                 self.legal_moves.clear();

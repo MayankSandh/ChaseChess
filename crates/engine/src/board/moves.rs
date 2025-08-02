@@ -53,16 +53,27 @@ impl Board {
         // Get pseudo-legal moves first
         let pseudo_moves = self.get_pseudo_legal_moves(square);
         
+        // DEBUG: Print pseudo-legal moves
+        let piece = self.get_piece(square);
+        if piece_type(piece) == KING {
+            println!("🔍 LEGAL MOVE FILTERING DEBUG");
+            println!("  Square: {:?}, Piece: King", square);
+            println!("  Pseudo-legal moves ({}):", pseudo_moves.len());
+            for (i, mv) in pseudo_moves.iter().enumerate() {
+                println!("    [{}] {:?}", i, mv);
+            }
+        }
+    
         // Check if our king is in check
         let our_color = self.current_turn;
         let king_square = match self.find_king(our_color) {
             Some(square) => square,
             None => return Vec::new(), // No king found
         };
-        
+    
         let opponent_color = opposite_color(our_color);
         let checking_pieces = self.find_checking_pieces(king_square, opponent_color);
-        
+    
         match checking_pieces.len() {
             0 => {
                 // Not in check, but still need to validate king moves
@@ -71,46 +82,37 @@ impl Board {
                     *self.ignore_square_for_threats.borrow_mut() = Some(square);
                     let filtered_moves = self.filter_king_moves_in_check(pseudo_moves, opponent_color);
                     *self.ignore_square_for_threats.borrow_mut() = None;
+                    
+                    // DEBUG: Print filtered moves
+                    if piece_type(piece) == KING {
+                        println!("  After filtering ({}):", filtered_moves.len());
+                        for (i, mv) in filtered_moves.iter().enumerate() {
+                            println!("    [{}] {:?}", i, mv);
+                        }
+                    }
+                    
                     filtered_moves
                 } else {
                     pseudo_moves
                 }
-            }
+            },
             1 => {
-                // Single check - can block or capture
-                let checking_piece_square = checking_pieces[0];
-                let blocking_squares = self.get_blocking_squares(king_square, checking_piece_square);
+                // Single check: can block, capture checker, or move king
                 let piece = self.get_piece(square);
-                
                 if piece_type(piece) == KING {
+                    // King moves when in single check
                     *self.ignore_square_for_threats.borrow_mut() = Some(square);
                     let filtered_moves = self.filter_king_moves_in_check(pseudo_moves, opponent_color);
                     *self.ignore_square_for_threats.borrow_mut() = None;
                     filtered_moves
                 } else {
-                    // ✅ FIX: Handle en passant moves specially during check resolution
-                    pseudo_moves.into_iter()
-                        .filter(|&mv| {
-                            // Normal case: move blocks or captures checking piece
-                            if blocking_squares.contains(&mv) {
-                                return true;
-                            }
-                            
-                            // ✅ SPECIAL CASE: En passant that removes the checking piece
-                            if self.is_en_passant_move(Move::new(square, mv)) {
-                                // Check if this en passant removes the checking piece
-                                if let Some(en_passant_pawn_square) = self.en_passant_pawn {
-                                    return en_passant_pawn_square == checking_piece_square;
-                                }
-                            }
-                            
-                            false
-                        })
-                        .collect()
+                    // Other pieces: must block or capture the checking piece
+                    // Use the correct method name and provide the square parameter
+                    self.filter_moves_to_escape_check(square, pseudo_moves, checking_pieces[0])
                 }
-            }
+            },
             _ => {
-                // Double check - only king moves are legal
+                // Double check or more: only king can move
                 let piece = self.get_piece(square);
                 if piece_type(piece) == KING {
                     *self.ignore_square_for_threats.borrow_mut() = Some(square);
@@ -118,11 +120,15 @@ impl Board {
                     *self.ignore_square_for_threats.borrow_mut() = None;
                     filtered_moves
                 } else {
+                    // No legal moves for other pieces in double check
                     Vec::new()
                 }
             }
         }
+        
+        
     }
+    
     
     /// Get pseudo-legal moves (before checking for check/pins)
     pub fn get_pseudo_legal_moves(&self, square: Square) -> Vec<Square> {
@@ -300,32 +306,43 @@ impl Board {
         // Filter out squares occupied by our own pieces
         let our_pieces = self.bitboards.get_all_pieces(source_color);
         let valid_moves = king_attack_mask & !our_pieces;
+    
+        // DEBUG: Print what moves are generated initially
+        println!("======🔍 KING MOVE DEBUG - Square: {:?}", square);
+        println!("  King attack mask: {:064b}", king_attack_mask);
+        println!("  Our pieces mask:  {:064b}", our_pieces);
+        println!("  Valid moves mask: {:064b}", valid_moves);
         
         // Convert bitboard to squares
         let mut moves = Vec::new();
         let mut remaining_moves = valid_moves;
-        
         while remaining_moves != 0 {
             let square_index = remaining_moves.trailing_zeros() as u8;
-            moves.push(index_to_square(square_index));
+            let move_square = index_to_square(square_index);
+            moves.push(move_square);
+            println!("  Generated normal king move: {:?} (index {})", move_square, square_index);
             remaining_moves &= remaining_moves - 1; // Remove the processed bit
         }
-        
-        // Add castling moves (unchanged - castling logic remains the same)
+    
+        // Add castling moves
         if self.can_castle(source_color, true) {
-            // Kingside castling
             let king_rank = square.rank();
-            moves.push(Square::new(6, king_rank)); // g1 or g8
+            let castle_square = Square::new(6, king_rank);
+            moves.push(castle_square);
+            println!("  Generated kingside castling move: {:?}", castle_square);
         }
-
+    
         if self.can_castle(source_color, false) {
-            // Queenside castling
             let king_rank = square.rank();
-            moves.push(Square::new(2, king_rank)); // c1 or c8
+            let castle_square = Square::new(2, king_rank);
+            moves.push(castle_square);
+            println!("  Generated queenside castling move: {:?}", castle_square);
         }
-
+    
+        println!("  Total moves generated: {}", moves.len());
         moves
     }
+    
 
 
     /// Generate sliding piece moves in given directions

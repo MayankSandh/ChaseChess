@@ -1,10 +1,9 @@
 use egui::{Color32, Rect, Sense, Vec2}; 
-use engine::{Board, Move, Square, piece_type, piece_color, is_empty}; // Removed unused is_white, is_black
+use engine::{Board, Move, Square, piece_type, piece_color, is_empty, ChessLogger}; // Removed unused is_white, is_black
 use engine::{PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, WHITE, BLACK};
 use ai::SearchEngine;
 use std::time::Instant;
 
-#[derive(Default)]
 pub struct ChessApp {
     board: Board,
     selected_square: Option<Square>,
@@ -17,6 +16,11 @@ pub struct ChessApp {
     game_over: bool,
     promotion_pending: Option<PendingPromotion>,
     show_promotion_dialog: bool,
+    logger: ChessLogger,
+    debug_enabled: bool,
+    game_log: String,
+    move_count: u16,
+    game_start_time: std::time::Instant,
 }
 
 #[derive(Clone, Debug)]
@@ -41,6 +45,11 @@ impl ChessApp {
             game_over: false,
             promotion_pending: None,
             show_promotion_dialog: false,
+            logger: ChessLogger::new(true),
+            debug_enabled: true, 
+            game_log: String::new(),
+            move_count: 1,
+            game_start_time: std::time::Instant::now(),
         }
     }
 
@@ -86,9 +95,33 @@ impl eframe::App for ChessApp {
                     ui.label("AI will move shortly...");
                 }
                 
+                if ui.checkbox(&mut self.debug_enabled, "Debug Logging").clicked() {
+                    if self.debug_enabled {
+                        self.game_log.clear();
+                        self.game_start_time = std::time::Instant::now();
+                        self.move_count = 1;
+                    }
+                }
+
                 // Push New Game button to the right
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("New Game").clicked() {
+
+                        if !self.game_over && self.move_count > 1 && !self.game_log.is_empty() {
+                            // Add abrupt end message to log
+                            if self.debug_enabled {
+                                let elapsed = self.game_start_time.elapsed().as_secs_f64();
+                                let abrupt_end_message = format!(
+                                    "[{:06.2}s] === Game finished abruptly ===\n",
+                                    elapsed
+                                );
+                                self.game_log.push_str(&abrupt_end_message);
+                            }
+                            
+                            // Save log before starting new game
+                            self.save_game_log();
+                        }
+
                         self.board = Board::new();
                         self.selected_square = None;
                         self.legal_moves.clear();
@@ -98,6 +131,9 @@ impl eframe::App for ChessApp {
                         self.ai_move_scheduled = None;
                         self.promotion_pending = None;
                         self.show_promotion_dialog = false;
+                        self.game_log.clear();
+                        self.game_start_time = std::time::Instant::now();
+                        self.move_count = 1;
                     }
                 });
             });
@@ -174,7 +210,7 @@ impl ChessApp {
                 let piece = self.board.get_piece(selected);
                 let piece_type_val = piece_type(piece);
                 let piece_color_val = piece_color(piece);
-                
+                self.log_move("HUMAN", selected, clicked_square, piece_type_val);
                 // Check if this is a pawn promotion move
                 if piece_type_val == PAWN {
                     let promotion_rank = if piece_color_val == WHITE { 7 } else { 0 };
@@ -220,31 +256,39 @@ impl ChessApp {
     } 
     
     fn trigger_ai_move(&mut self) {
-        if self.game_over {
-            return;
-        }
+        if self.game_over { return; }
         
-        
+        let start_time = std::time::Instant::now();
         self.is_ai_thinking = true;
         
         let result = self.ai_engine.search(&mut self.board, 4);
-        
         if let Some(ai_move) = result.best_move {
+            let thinking_time = start_time.elapsed().as_secs_f64();
+            
+            // Log AI move
+            let piece = self.board.get_piece(ai_move.from);
+            let piece_type_val = piece_type(piece);
+            self.log_move("AI", ai_move.from, ai_move.to, piece_type_val);
+            self.log_ai_thinking(thinking_time, result.evaluation);
             
             if self.board.try_make_move(ai_move).is_ok() {
                 self.last_ai_move = Some(ai_move);
-            } 
-        } 
+            }
+        }
         
         self.is_ai_thinking = false;
         self.check_game_over();
     }
     
-    
     fn check_game_over(&mut self) {
         let legal_moves = self.board.get_all_legal_moves();
         if legal_moves.is_empty() {
             self.game_over = true;
+            
+            // Save log when game ends
+            if !self.game_log.is_empty() {
+                self.save_game_log();
+            }
         }
     }
     
@@ -442,5 +486,79 @@ impl ChessApp {
         self.show_promotion_dialog = false;
     }
     
+    fn log_move(&mut self, move_type: &str, from: Square, to: Square, piece_type: u8) {
+        if !self.debug_enabled { return; }
+        
+        let elapsed = self.game_start_time.elapsed().as_secs_f64();
+        let move_str = format!("{}{}", 
+            Self::square_to_notation(from), 
+            Self::square_to_notation(to)
+        );
+        
+        let log_entry = format!(
+            "[{:06.2}s] Move {}: {} played {} ({})\n",
+            elapsed,
+            self.move_count,
+            move_type,
+            move_str,
+            Self::piece_to_string(piece_type)
+        );
+        
+        self.game_log.push_str(&log_entry);
+        self.move_count += 1;
+    }
+    
+    fn log_ai_thinking(&mut self, thinking_time: f64, evaluation: i32) {
+        if !self.debug_enabled { return; }
+        
+        let log_entry = format!(
+            "  AI thinking time: {:.3}s, Evaluation: {} cp\n",
+            thinking_time, evaluation
+        );
+        self.game_log.push_str(&log_entry);
+    }
+    
+    fn save_game_log(&self) {
+        if !self.debug_enabled { return; }
+        
+        use std::fs;
+        use chrono::Local;
+        
+        // Create logs directory
+        let _ = fs::create_dir_all("logs");
+        
+        // Generate filename with MM/DD/YYYY format
+        let now = Local::now();
+        let filename = format!("chess_log_{}.txt", 
+            now.format("%m-%d-%Y_%H-%M-%S"));
+        
+        let full_log = format!(
+            "=== Chess Game Log ===\n\
+            Game Duration: {:.1}s\n\
+            Total Moves: {}\n\
+            \n{}\n\
+            === End Log ===",
+            self.game_start_time.elapsed().as_secs_f64(),
+            self.move_count - 1,
+            self.game_log
+        );
+        
+        let _ = fs::write(format!("logs/{}", filename), full_log);
+    }
+    
+    // Helper functions
+    fn square_to_notation(square: Square) -> String {
+        let file = (b'a' + square.file()) as char;
+        let rank = (b'1' + square.rank()) as char;
+        format!("{}{}", file, rank)
+    }
+    
+    fn piece_to_string(piece_type: u8) -> &'static str {
+        match piece_type {
+            1 => "Pawn", 2 => "Knight", 3 => "Bishop", 
+            4 => "Rook", 5 => "Queen", 6 => "King",
+            _ => "Unknown"
+        }
+    }
     
 }

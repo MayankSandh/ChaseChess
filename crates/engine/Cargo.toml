@@ -12,3 +12,5 @@ path = "src/lib.rs"
 name = "perft_test"
 path = "src/bin/perft_test.rs"
 
+[dependencies]
+chrono = "0.4"

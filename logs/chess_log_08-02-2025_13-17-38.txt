@@ -1,0 +1,85 @@
+=== Chess Game Log ===
+Game Duration: 191.5s
+Total Moves: 53
+
+[002.40s] Move 1: HUMAN played g1f3 (Knight)
+[002.52s] Move 2: AI played a7a6 (Pawn)
+  AI thinking time: 0.102s, Evaluation: 0 cp
+[004.23s] Move 3: HUMAN played b1c3 (Knight)
+[004.33s] Move 4: AI played a6a5 (Pawn)
+  AI thinking time: 0.079s, Evaluation: 0 cp
+[005.85s] Move 5: HUMAN played d2d4 (Pawn)
+[006.03s] Move 6: AI played a5a4 (Pawn)
+  AI thinking time: 0.168s, Evaluation: 0 cp
+[008.08s] Move 7: HUMAN played e2e4 (Pawn)
+[008.35s] Move 8: AI played b7b6 (Pawn)
+  AI thinking time: 0.249s, Evaluation: 0 cp
+[009.75s] Move 9: HUMAN played f1c4 (Bishop)
+[010.38s] Move 10: AI played e7e6 (Pawn)
+  AI thinking time: 0.615s, Evaluation: 0 cp
+[011.83s] Move 11: HUMAN played c1f4 (Bishop)
+[017.17s] Move 12: AI played a4a3 (Pawn)
+  AI thinking time: 5.323s, Evaluation: 0 cp
+[019.90s] Move 13: HUMAN played b2b3 (Pawn)
+[022.43s] Move 14: AI played c7c6 (Pawn)
+  AI thinking time: 2.496s, Evaluation: 0 cp
+[027.00s] Move 15: HUMAN played e1g1 (King)
+[028.54s] Move 16: AI played d7d6 (Pawn)
+  AI thinking time: 1.528s, Evaluation: 0 cp
+[051.16s] Move 17: HUMAN played d1d3 (Queen)
+[052.70s] Move 18: AI played b6b5 (Pawn)
+  AI thinking time: 1.519s, Evaluation: 120 cp
+[058.18s] Move 19: HUMAN played c4b5 (Bishop)
+[060.17s] Move 20: AI played c6b5 (Pawn)
+  AI thinking time: 1.970s, Evaluation: 120 cp
+[061.32s] Move 21: HUMAN played c3b5 (Knight)
+[063.60s] Move 22: AI played f7f6 (Pawn)
+  AI thinking time: 2.252s, Evaluation: 130 cp
+[070.00s] Move 23: HUMAN played a1d1 (Rook)
+[073.98s] Move 24: AI played d6d5 (Pawn)
+  AI thinking time: 3.961s, Evaluation: 130 cp
+[077.62s] Move 25: HUMAN played e4d5 (Pawn)
+[081.55s] Move 26: AI played e6e5 (Pawn)
+  AI thinking time: 3.923s, Evaluation: 30 cp
+[084.29s] Move 27: HUMAN played d4e5 (Pawn)
+[085.48s] Move 28: AI played f6e5 (Pawn)
+  AI thinking time: 1.171s, Evaluation: -70 cp
+[107.75s] Move 29: HUMAN played f3e5 (Knight)
+[107.76s] Move 30: AI played g7g5 (Pawn)
+  AI thinking time: 0.000s, Evaluation: -70 cp
+[111.99s] Move 31: HUMAN played f4g3 (Bishop)
+[117.64s] Move 32: AI played d8e7 (Queen)
+  AI thinking time: 5.629s, Evaluation: -70 cp
+[124.60s] Move 33: HUMAN played f1e1 (Rook)
+[124.99s] Move 34: AI played e7g7 (Queen)
+  AI thinking time: 0.372s, Evaluation: -70 cp
+[134.74s] Move 35: HUMAN played e5c6 (Knight)
+[135.23s] Move 36: AI played g7e7 (Queen)
+  AI thinking time: 0.479s, Evaluation: -100000 cp
+[140.00s] Move 37: HUMAN played e1e7 (Rook)
+[140.06s] Move 38: AI played g8e7 (Knight)
+  AI thinking time: 0.044s, Evaluation: -100000 cp
+[142.91s] Move 39: HUMAN played c6e7 (Knight)
+[144.22s] Move 40: AI played f8e7 (Bishop)
+  AI thinking time: 1.289s, Evaluation: -100000 cp
+[149.57s] Move 41: HUMAN played d1e1 (Rook)
+[149.66s] Move 42: AI played g5g4 (Pawn)
+  AI thinking time: 0.084s, Evaluation: -100000 cp
+[155.63s] Move 43: HUMAN played d5d6 (Pawn)
+[155.93s] Move 44: AI played a8a7 (Rook)
+  AI thinking time: 0.278s, Evaluation: -1100 cp
+[158.90s] Move 45: HUMAN played b5a7 (Knight)
+[158.91s] Move 46: AI played b8c6 (Knight)
+  AI thinking time: 0.000s, Evaluation: -1100 cp
+[160.98s] Move 47: HUMAN played a7c6 (Knight)
+[161.08s] Move 48: AI played h7h6 (Pawn)
+  AI thinking time: 0.078s, Evaluation: -100000 cp
+[173.73s] Move 49: HUMAN played d6e7 (Pawn)
+[173.75s] Move 50: AI played h6h5 (Pawn)
+  AI thinking time: 0.000s, Evaluation: -100000 cp
+[175.20s] Move 51: HUMAN played c6e5 (Knight)
+[175.31s] Move 52: AI played h5h4 (Pawn)
+  AI thinking time: 0.097s, Evaluation: -100000 cp
+[191.47s] Move 53: HUMAN played d3d8 (Queen)
+
+=== End Log ===

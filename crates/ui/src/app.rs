@@ -12,9 +12,18 @@ pub struct ChessApp {
     ai_engine: SearchEngine,
     ai_enabled: bool,
     is_ai_thinking: bool,
-    ai_move_scheduled: Option<Instant>,  // Changed from ai_needs_to_move
+    ai_move_scheduled: Option<Instant>,  
     last_ai_move: Option<Move>,
     game_over: bool,
+    promotion_pending: Option<PendingPromotion>,
+    show_promotion_dialog: bool,
+}
+
+#[derive(Clone, Debug)]
+struct PendingPromotion {
+    from_square: Square,
+    to_square: Square,
+    player_color: u8,
 }
 
 impl ChessApp {
@@ -27,9 +36,11 @@ impl ChessApp {
             ai_engine: SearchEngine::new(),
             ai_enabled: true,
             is_ai_thinking: false,
-            ai_move_scheduled: None,  // Changed from ai_needs_to_move: false
+            ai_move_scheduled: None,  
             last_ai_move: None,
             game_over: false,
+            promotion_pending: None,
+            show_promotion_dialog: false,
         }
     }
 
@@ -85,6 +96,8 @@ impl eframe::App for ChessApp {
                         self.game_over = false;
                         self.is_ai_thinking = false;
                         self.ai_move_scheduled = None;
+                        self.promotion_pending = None;
+                        self.show_promotion_dialog = false;
                     }
                 });
             });
@@ -133,6 +146,7 @@ impl eframe::App for ChessApp {
                 ctx.request_repaint_after(std::time::Duration::from_millis(remaining.min(10)));
             }
         }
+        self.show_promotion_dialog(ctx);
     }
 }
 
@@ -157,6 +171,27 @@ impl ChessApp {
                 self.selected_square = None;
                 self.legal_moves.clear();
             } else if self.legal_moves.contains(&clicked_square) {
+                let piece = self.board.get_piece(selected);
+                let piece_type_val = piece_type(piece);
+                let piece_color_val = piece_color(piece);
+                
+                // Check if this is a pawn promotion move
+                if piece_type_val == PAWN {
+                    let promotion_rank = if piece_color_val == WHITE { 7 } else { 0 };
+                    
+                    if clicked_square.rank() == promotion_rank {
+                        // This is a promotion move - show dialog instead of executing immediately
+                        self.promotion_pending = Some(PendingPromotion {
+                            from_square: selected,
+                            to_square: clicked_square,
+                            player_color: piece_color_val,
+                        });
+                        self.show_promotion_dialog = true;
+                        self.selected_square = None;
+                        self.legal_moves.clear();
+                        return; // Don't execute the move yet
+                    }
+                }
                 let mv = Move::new(selected, clicked_square);
                 if self.board.try_make_move(mv).is_ok() {
                     self.selected_square = None;
@@ -305,4 +340,107 @@ impl ChessApp {
             Color32::BLACK,
         );
     }
+
+    fn show_promotion_dialog(&mut self, ctx: &egui::Context) {
+        if !self.show_promotion_dialog {
+            return;
+        }
+        
+        let Some(pending) = &self.promotion_pending else {
+            return;
+        };
+        
+        // EXTRACT the values we need BEFORE entering the closure
+        let from_square = pending.from_square;
+        let to_square = pending.to_square;
+        let player_color = pending.player_color;
+        
+        // Create modal dialog
+        egui::Window::new("Choose Promotion")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(10.0);
+                    
+                    ui.heading("Choose a piece to promote to:");
+                    ui.add_space(20.0);
+                    
+                    // Choose piece symbols based on player color
+                    let (queen_symbol, rook_symbol, bishop_symbol, knight_symbol) = 
+                        if player_color == WHITE {
+                            ("♕", "♖", "♗", "♘")
+                        } else {
+                            ("♛", "♜", "♝", "♞")
+                        };
+                    
+                    // Create promotion piece buttons
+                    ui.horizontal(|ui| {
+                        ui.add_space(10.0);
+                        
+                        // Queen button
+                        if ui.add_sized([80.0, 80.0], 
+                            egui::Button::new(format!("{}\nQueen", queen_symbol))).clicked() {
+                            self.execute_promotion_move(from_square, to_square, QUEEN);
+                        }
+                        
+                        ui.add_space(5.0);
+                        
+                        // Rook button
+                        if ui.add_sized([80.0, 80.0], 
+                            egui::Button::new(format!("{}\nRook", rook_symbol))).clicked() {
+                            self.execute_promotion_move(from_square, to_square, ROOK);
+                        }
+                        
+                        ui.add_space(5.0);
+                        
+                        // Bishop button
+                        if ui.add_sized([80.0, 80.0], 
+                            egui::Button::new(format!("{}\nBishop", bishop_symbol))).clicked() {
+                            self.execute_promotion_move(from_square, to_square, BISHOP);
+                        }
+                        
+                        ui.add_space(5.0);
+                        
+                        // Knight button
+                        if ui.add_sized([80.0, 80.0], 
+                            egui::Button::new(format!("{}\nKnight", knight_symbol))).clicked() {
+                            self.execute_promotion_move(from_square, to_square, KNIGHT);
+                        }
+                        
+                        ui.add_space(10.0);
+                    });
+                    
+                    ui.add_space(15.0);
+                    
+                    // Cancel button (optional)
+                    if ui.button("Cancel").clicked() {
+                        self.promotion_pending = None;
+                        self.show_promotion_dialog = false;
+                    }
+                    
+                    ui.add_space(10.0);
+                });
+            });
+    }
+    
+
+    fn execute_promotion_move(&mut self, from: Square, to: Square, promotion_piece: u8) {
+        let promotion_move = Move::new_promotion(from, to, promotion_piece);
+        
+        if self.board.try_make_move(promotion_move).is_ok() {
+            // Schedule AI move if it's now AI's turn
+            if self.board.current_turn == BLACK && self.ai_enabled {
+                self.ai_move_scheduled = Some(Instant::now());
+            }
+            self.check_game_over();
+        }
+        
+        // Clear promotion state
+        self.promotion_pending = None;
+        self.show_promotion_dialog = false;
+    }
+    
+    
 }

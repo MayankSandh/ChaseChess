@@ -4,6 +4,11 @@ use engine::{PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, WHITE, BLACK};
 use ai::SearchEngine;
 use std::time::Instant;
 
+// Add these lines after your imports
+const FILES: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+const RANKS: [char; 8] = ['1', '2', '3', '4', '5', '6', '7', '8'];
+
+
 #[derive(Default)]
 pub struct ChessApp {
     board: Board,
@@ -29,6 +34,7 @@ struct PendingPromotion {
 impl ChessApp {
 
     pub fn new() -> Self {
+        engine::bitboard::initialize_engine();
         Self {
             board: Board::new(),
             selected_square: None,
@@ -310,6 +316,40 @@ impl ChessApp {
 
         // Draw board border
         painter.rect_stroke(board_rect, 0.0, egui::Stroke::new(2.0, Color32::BLACK));
+
+        // Draw coordinate labels  
+        let label_font = egui::FontId::new(16.0, egui::FontFamily::Monospace);
+        let label_color = Color32::DARK_GRAY;
+
+
+        // Draw file labels (a-h) at the bottom
+        for (file, &file_char) in FILES.iter().enumerate() {
+            let x = board_rect.min.x + (file as f32 * square_size) + (square_size / 2.0);
+            let y = board_rect.max.y + 8.0;
+            
+            painter.text(
+                egui::Pos2::new(x, y),
+                egui::Align2::CENTER_TOP,
+                file_char.to_string(),
+                label_font.clone(),
+                label_color,
+            );
+        }
+
+        // Draw rank labels (1-8) at the right edge  
+        for (rank_index, &rank_char) in RANKS.iter().enumerate() {
+            let x = board_rect.max.x + 8.0;
+            let y = board_rect.min.y + ((7 - rank_index) as f32 * square_size) + (square_size / 2.0);
+            
+            painter.text(
+                egui::Pos2::new(x, y),
+                egui::Align2::LEFT_CENTER,
+                rank_char.to_string(),
+                label_font.clone(),
+                label_color,
+            );
+        }
+
     }
     
     fn draw_piece(&self, painter: &egui::Painter, piece: u8, square_rect: Rect) {

@@ -22,6 +22,8 @@ pub struct ChessApp {
     game_over: bool,
     promotion_pending: Option<PendingPromotion>,
     show_promotion_dialog: bool,
+    move_history: Vec<Move>,     
+    redo_history: Vec<Move>,    
 }
 
 #[derive(Clone, Debug)]
@@ -47,6 +49,8 @@ impl ChessApp {
             game_over: false,
             promotion_pending: None,
             show_promotion_dialog: false,
+            move_history: Vec::new(),
+            redo_history: Vec::new(),
         }
     }
 
@@ -104,6 +108,18 @@ impl eframe::App for ChessApp {
                         self.ai_move_scheduled = None;
                         self.promotion_pending = None;
                         self.show_promotion_dialog = false;
+                        self.move_history.clear();
+                        self.redo_history.clear();
+                    }
+
+                    // ADD: Redo button
+                    if ui.add_enabled(self.can_redo(), egui::Button::new("Redo")).clicked() {
+                        self.redo_move();
+                    }
+                    
+                    // ADD: Undo button  
+                    if ui.add_enabled(self.can_undo(), egui::Button::new("Undo")).clicked() {
+                        self.undo_move();
                     }
                 });
             });
@@ -200,6 +216,10 @@ impl ChessApp {
                 }
                 let mv = Move::new(selected, clicked_square);
                 if self.board.try_make_move(mv).is_ok() {
+
+                    self.move_history.push(mv);
+                    self.redo_history.clear();
+
                     self.selected_square = None;
                     self.legal_moves.clear();
                     
@@ -238,6 +258,9 @@ impl ChessApp {
         if let Some(ai_move) = result.best_move {
             
             if self.board.try_make_move(ai_move).is_ok() {
+                self.move_history.push(ai_move);
+                self.redo_history.clear();
+
                 self.last_ai_move = Some(ai_move);
             } 
         } 
@@ -470,6 +493,9 @@ impl ChessApp {
         let promotion_move = Move::new_promotion(from, to, promotion_piece);
         
         if self.board.try_make_move(promotion_move).is_ok() {
+
+            self.move_history.push(promotion_move);
+            self.redo_history.clear();
             // Schedule AI move if it's now AI's turn
             if self.board.current_turn == BLACK && self.ai_enabled {
                 self.ai_move_scheduled = Some(Instant::now());
@@ -482,5 +508,48 @@ impl ChessApp {
         self.show_promotion_dialog = false;
     }
     
+    fn can_undo(&self) -> bool {
+        !self.move_history.is_empty() && !self.is_ai_thinking && self.ai_move_scheduled.is_none()
+    }
+    
+    fn can_redo(&self) -> bool {
+        !self.redo_history.is_empty() && !self.is_ai_thinking && self.ai_move_scheduled.is_none()
+    }
+    
+    fn undo_move(&mut self) {
+        if let Some(last_move) = self.move_history.pop() {
+            // Use your existing undo function
+            if self.board.undo_move().is_ok() {
+                // Move the undone move to redo stack
+                self.redo_history.push(last_move);
+                
+                // Clear UI state
+                self.selected_square = None;
+                self.legal_moves.clear();
+                self.last_ai_move = None;
+                self.game_over = false;
+            } else {
+                // If undo failed, restore the move to history
+                self.move_history.push(last_move);
+            }
+        }
+    }
+    
+    fn redo_move(&mut self) {
+        if let Some(redo_move) = self.redo_history.pop() {
+            if self.board.try_make_move(redo_move).is_ok() {
+                // Move back to move history
+                self.move_history.push(redo_move);
+                
+                // Clear UI state
+                self.selected_square = None;
+                self.legal_moves.clear();
+                self.game_over = false;
+            } else {
+                // If redo failed, restore the move to redo stack
+                self.redo_history.push(redo_move);
+            }
+        }
+    }
     
 }

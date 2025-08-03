@@ -13,7 +13,7 @@ pub struct ChessLogger {
     current_search_depth: u32,
     indent_level: usize,
     last_game_phase: Option<u8>,
-    in_evaluation: bool,
+    pub in_evaluation: bool,
 }
 
 impl ChessLogger {
@@ -315,6 +315,102 @@ impl ChessLogger {
             }
         }
     }
+
+    // 🎯 ROOT SEARCH LOGGING
+    pub fn log_search_root_start(&mut self, depth: u32, moves: &[Move]) {
+        if self.should_log_advanced() {
+            self.log(&format!("🔍 === ROOT SEARCH DEPTH {} ===", depth));
+            self.log(&format!("📋 Legal moves ({}):", moves.len()));
+            self.increase_indent();
+            for (i, &mv) in moves.iter().enumerate() {
+                self.log_with_indent(&format!("{:2}. {}", i + 1, move_to_string(mv)));
+            }
+            self.decrease_indent();
+        }
+    }
+
+    pub fn log_move_ordering_result(&mut self, ordered_moves: &[Move], board: &crate::Board) {
+        if self.should_log_advanced() {
+            self.log("🎯 Move ordering result:");
+            self.increase_indent();
+            for (i, &mv) in ordered_moves.iter().enumerate() {
+                let from_piece = board.get_piece(mv.from);
+                let to_piece = board.get_piece(mv.to);
+                let capture = if !is_empty(to_piece) { " [CAPTURE]" } else { "" };
+                self.log_with_indent(&format!("{:2}. {}{}", i + 1, move_to_string(mv), capture));
+            }
+            self.decrease_indent();
+        }
+    }
+
+    pub fn log_root_move_start(&mut self, mv: Move, move_num: usize, total_moves: usize, alpha: i32, beta: i32) {
+        if self.should_log_advanced() {
+            self.log(&format!("🔄 === ANALYZING ROOT MOVE {}/{}: {} ===", move_num, total_moves, move_to_string(mv)));
+            self.log(&format!("   Alpha: {}, Beta: {}", alpha, beta));
+            self.increase_indent();
+        }
+    }
+
+    pub fn log_root_move_result(&mut self, mv: Move, score: i32, alpha: i32, beta: i32) {
+        if self.should_log_advanced() {
+            let status = if score > alpha { "📈 IMPROVED" } else if score >= beta { "✂️ CUTOFF" } else { "📊 NORMAL" };
+            self.log_with_indent(&format!("✅ {} → Score: {} | {}", move_to_string(mv), score, status));
+            self.decrease_indent();
+        }
+    }
+
+    pub fn log_root_alpha_change(&mut self, old_alpha: i32, new_alpha: i32, mv: Move) {
+        if self.should_log_advanced() {
+            self.log(&format!("🎯 NEW BEST MOVE: {} | Alpha: {} → {} (+{})", 
+                move_to_string(mv), old_alpha, new_alpha, new_alpha - old_alpha));
+        }
+    }
+
+    // 🎯 ALPHA-BETA NODE LOGGING
+    pub fn log_alphabeta_node_enter(&mut self, depth: i32, alpha: i32, beta: i32, nodes: u64) {
+        if self.should_log_advanced() && depth >= 2 { // Only log deeper nodes to avoid spam
+            self.log_with_indent(&format!("├─ Node depth {} | α={}, β={} | Nodes: {}", depth, alpha, beta, nodes));
+            self.increase_indent();
+        }
+    }
+
+    pub fn log_alphabeta_move_start(&mut self, mv: Move, move_num: usize, total_moves: usize, depth: i32, alpha: i32, beta: i32) {
+        if self.should_log_advanced() && depth >= 2 {
+            self.log_with_indent(&format!("├─ Move {}/{}: {} (depth {})", move_num, total_moves, move_to_string(mv), depth));
+        }
+    }
+
+    pub fn log_alphabeta_move_result(&mut self, mv: Move, score: i32, alpha: i32, beta: i32) {
+        if self.should_log_advanced() {
+            let comparison = if score > alpha { ">" } else if score == alpha { "=" } else { "<" };
+            self.log_with_indent(&format!("   └─ {} → {} {} α({})", move_to_string(mv), score, comparison, alpha));
+        }
+    }
+
+
+    // 🎯 QUIESCENCE LOGGING
+    pub fn log_quiescence_start(&mut self, alpha: i32, beta: i32) {
+        if self.should_log_advanced() {
+            self.log_with_indent(&format!("🔍 Quiescence search | α={}, β={}", alpha, beta));
+            self.increase_indent();
+        }
+    }
+
+    pub fn log_quiescence_result(&mut self, eval: i32) {
+        if self.should_log_advanced() {
+            self.log_with_indent(&format!("✅ Quiescence result: {}", eval));
+            self.decrease_indent();
+        }
+    }
+
+    pub fn log_terminal_node(&mut self, eval: i32, in_check: bool) {
+        if self.should_log_advanced() {
+            let reason = if in_check { "CHECKMATE" } else { "STALEMATE" };
+            self.log_with_indent(&format!("🏁 Terminal node: {} ({})", eval, reason));
+        }
+    }
+
+    
 }
 
 fn move_to_string(mv: Move) -> String {

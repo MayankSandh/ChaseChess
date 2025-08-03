@@ -2,6 +2,7 @@ use engine::{Board, types::*};
 use crate::piece_square_tables::*;
 use crate::types::*;
 use std::sync::OnceLock;
+use crate::AILoggerExtensions;
 
 static PST: OnceLock<PreCalculatedPST> = OnceLock::new();
 
@@ -19,48 +20,28 @@ pub fn evaluate_position(board: &Board) -> i32 {
     let material_score = evaluate_material(board);
     score += material_score;
     
-    // Uncomment this for PST evaluation
     let pst_score = evaluate_position_with_pst(board);
     score += pst_score;
 
-    // LOG: Detailed evaluation if logger is available
+    // Enhanced logging with context
     if let Some(logger_ref) = &board.logger {
         let material_white = calculate_material_for_color(board, engine::WHITE);
         let material_black = calculate_material_for_color(board, engine::BLACK);
         let game_phase = crate::piece_square_tables::calculate_game_phase(board);
         
-        // Check for game phase transitions
         logger_ref.borrow_mut().check_and_log_phase_transition(game_phase, "position evaluation");
         
-        // Log detailed breakdown using safe methods
+        // Use the new detailed PST logging
+        logger_ref.borrow_mut().log_detailed_pst_evaluation(board, pst_score);
+        
         logger_ref.borrow_mut().log_evaluation_breakdown_safe(
             material_white, material_black, pst_score, game_phase, score
         );
-        
-        // Log raw PST values if advanced logging using safe method
-        logger_ref.borrow_mut().log_raw_pst_breakdown_safe(board);
-        
-        // Log endgame pattern if detected
-        let pattern = crate::piece_square_tables::detect_endgame_pattern(board);
-        match pattern {
-            crate::piece_square_tables::EndgamePattern::KQvsK => {
-                logger_ref.borrow_mut().log_endgame_pattern("KQvsK", "Using specialized King+Queen vs King tables");
-            },
-            crate::piece_square_tables::EndgamePattern::KRvsK => {
-                logger_ref.borrow_mut().log_endgame_pattern("KRvsK", "Using specialized King+Rook vs King tables");
-            },
-            crate::piece_square_tables::EndgamePattern::PawnEndgame => {
-                logger_ref.borrow_mut().log_endgame_pattern("PawnEndgame", "Pawn promotion priority");
-            },
-            crate::piece_square_tables::EndgamePattern::RookEndgame => {
-                logger_ref.borrow_mut().log_endgame_pattern("RookEndgame", "Rook activity and pawn support");
-            },
-            _ => {}, // Don't log opening/middlegame patterns
-        }
     }
 
     score
 }
+
 
 // Add this helper function
 fn calculate_material_for_color(board: &Board, color: u8) -> i32 {

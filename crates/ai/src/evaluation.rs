@@ -85,6 +85,7 @@ fn evaluate_material(board: &Board) -> i32 {
     
     // Use your elegant mathematical approach
     (2 * (board.current_turn == WHITE) as i32 - 1) * (white_material - black_material)
+    // white_material - black_material
 }
 
 fn evaluate_position_with_pst(board: &Board) -> i32 {
@@ -105,7 +106,7 @@ fn evaluate_position_with_pst(board: &Board) -> i32 {
             for square in white_pieces {
                 let rank = square.0 / 8;
                 let file = square.0 % 8;
-                let square_index = (rank * 8 + file) as usize;
+                let square_index = ((7 - rank) * 8 + file) as usize; 
                 let pst_value = pst.get_value(piece_index, pattern, phase, square_index);
                 score += (2 * (board.current_turn == WHITE) as i32 - 1) * pst_value;
             }
@@ -115,7 +116,8 @@ fn evaluate_position_with_pst(board: &Board) -> i32 {
             for square in black_pieces {
                 let rank = square.0 / 8;
                 let file = square.0 % 8;
-                let square_index = ((7 - rank) * 8 + file) as usize; // Flip vertically for black
+                
+                let square_index = (rank * 8 + file) as usize;
                 let pst_value = pst.get_value(piece_index, pattern, phase, square_index);
                 score -= (2 * (board.current_turn == WHITE) as i32 - 1) * pst_value;
             }

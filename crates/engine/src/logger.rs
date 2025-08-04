@@ -48,15 +48,34 @@ impl ChessLogger {
         self.log("📊 Advanced logging disabled - Basic mode active");
     }
 
+    // pub fn log(&mut self, message: &str) {
+    //     let timestamp = self.game_start_time.elapsed().as_millis();
+    //     self.log_buffer.push_str(&format!("[{:>6}ms] {}\n", timestamp, message));
+    // }
+
+    // pub fn log_with_indent(&mut self, message: &str) {
+    //     let indent = "  ".repeat(self.indent_level);
+    //     let timestamp = self.game_start_time.elapsed().as_millis();
+    //     self.log_buffer.push_str(&format!("[{:>6}ms] {}{}\n", timestamp, indent, message));
+    // }
+
     pub fn log(&mut self, message: &str) {
-        let timestamp = self.game_start_time.elapsed().as_millis();
-        self.log_buffer.push_str(&format!("[{:>6}ms] {}\n", timestamp, message));
+        // ❌ Current (with timestamp):
+        // let timestamp = self.game_start_time.elapsed().as_millis();
+        // self.log_buffer.push_str(&format!("[{:>6}ms] {}\n", timestamp, message));
+        
+        // ✅ Fix (without timestamp):
+        self.log_buffer.push_str(&format!("{}\n", message));
     }
 
     pub fn log_with_indent(&mut self, message: &str) {
         let indent = "  ".repeat(self.indent_level);
-        let timestamp = self.game_start_time.elapsed().as_millis();
-        self.log_buffer.push_str(&format!("[{:>6}ms] {}{}\n", timestamp, indent, message));
+        // ❌ Current (with timestamp):
+        // let timestamp = self.game_start_time.elapsed().as_millis();
+        // self.log_buffer.push_str(&format!("[{:>6}ms] {}{}\n", timestamp, indent, message));
+        
+        // ✅ Fix (without timestamp):
+        self.log_buffer.push_str(&format!("{}{}\n", indent, message));
     }
 
     pub fn increase_indent(&mut self) { self.indent_level += 1; }
@@ -353,6 +372,7 @@ impl ChessLogger {
 
     pub fn log_root_move_result(&mut self, mv: Move, score: i32, alpha: i32, beta: i32) {
         if self.should_log_advanced() {
+            self.log(&format!("🔄 === ANALYSIS DONE! {} ===", move_to_string(mv)));
             let status = if score > alpha { "📈 IMPROVED" } else if score >= beta { "✂️ CUTOFF" } else { "📊 NORMAL" };
             self.log_with_indent(&format!("✅ {} → Score: {} | {}", move_to_string(mv), score, status));
             self.decrease_indent();

@@ -105,7 +105,7 @@ const OPENING_KING_PST: [i32; 64] = [
     -4, -6, -6, -8, -8, -6, -6, -4,
     -2, -4, -4, -4, -4, -4, -4, -2,
      4,  4,  0,  0,  0,  0,  4,  4,  // Reduced from 20 to 4
-     4,  6,  2,  0,  0,  2,  6,  4,  // Reduced from 30 to 6
+     4,  2,  6,  0,  0,  2,  6,  4,  // Reduced from 30 to 6
 ];
 
 // Endgame PST - Keep higher values as endgame positioning is more critical

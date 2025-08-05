@@ -71,7 +71,7 @@ pub fn is_empty(piece: Piece) -> bool {
     piece == EMPTY
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Move {
     pub from: Square,
     pub to: Square,

@@ -3,20 +3,21 @@ use crate::{evaluation::*, types::*};
 use crate::transposition::*;
 use crate::piece_square_tables::get_pst;
 
-
 pub struct SearchEngine {
     pub nodes_searched: u64,
     transposition_table: TranspositionTable,
     logger: Option<std::rc::Rc<std::cell::RefCell<engine::ChessLogger>>>,
+    killer_moves: [[Option<Move>; 2]; 128],
 }
 
 impl SearchEngine {
     pub fn new() -> Self {
         get_pst();
-        Self { 
+        Self {
             nodes_searched: 0,
-            transposition_table: TranspositionTable::new(64), 
+            transposition_table: TranspositionTable::new(64),
             logger: None,
+            killer_moves: [[None; 2]; 128],
         }
     }
 
@@ -24,7 +25,6 @@ impl SearchEngine {
         self.nodes_searched = 0;
         self.transposition_table.new_search(); // Age increment for new search
         let (best_move, evaluation) = self.alphabeta_root(board, depth as i32);
-        
         SearchResult {
             best_move,
             evaluation,
@@ -32,67 +32,62 @@ impl SearchEngine {
             nodes_searched: self.nodes_searched,
         }
     }
-    
 
     fn alphabeta_root(&mut self, board: &mut Board, depth: i32) -> (Option<Move>, i32) {
         let mut moves = board.get_all_legal_moves();
-        
         if moves.is_empty() {
             let eval = if board.is_in_check() { -MATE_SCORE } else { 0 };
             return (None, eval);
         }
-    
-        // Order moves for better alpha-beta efficiency
-        self.order_moves(board, &mut moves);
 
+        // Order moves for better alpha-beta efficiency
+        self.order_moves(board, &mut moves, depth);
         if let Some(logger) = &self.logger {
             logger.borrow_mut().log_search_start(depth as u32, moves.len());
         }
-    
+
         let mut best_score = -MATE_SCORE - 1;
         let mut best_move = None;
         let mut alpha = -MATE_SCORE - 1;
         let beta = MATE_SCORE + 1;
-    
+
         for (move_num, &mv) in moves.iter().enumerate() {
             if let Ok(_) = board.try_make_move(mv) {
                 let score = -self.alphabeta(board, depth - 1, -beta, -alpha);
                 if let Err(_) = board.undo_move() { break; }
-                
+
                 // LOG: Move analysis
                 if let Some(logger) = &self.logger {
                     logger.borrow_mut().log_move_analysis(mv, move_num + 1, moves.len(), score);
                 }
-                
+
                 if score > best_score {
                     best_score = score;
                     best_move = Some(mv);
                     
-                    // LOG: Alpha improvement 
+                    // LOG: Alpha improvement
                     if let Some(logger) = &self.logger {
                         if score > alpha {
                             logger.borrow_mut().log_alpha_change(alpha, score, mv);
                         }
                     }
+
+                    alpha = alpha.max(score);
                 }
-                
-                alpha = alpha.max(score);
             }
         }
-        
+
         // LOG: Search complete
         if let Some(logger) = &self.logger {
             logger.borrow_mut().log_search_complete(best_move, best_score, self.nodes_searched);
         }
-        
-    
+
         (best_move, best_score)
     }
-    
 
     fn alphabeta(&mut self, board: &mut Board, depth: i32, mut alpha: i32, beta: i32) -> i32 {
         self.nodes_searched += 1;
-        
+
         // Probe transposition table
         let hash = self.transposition_table.get_hash(board);
         if let Some((tt_score, tt_move)) = self.transposition_table.probe(hash, depth, alpha, beta) {
@@ -100,133 +95,164 @@ impl SearchEngine {
             if let Some(logger) = &self.logger {
                 logger.borrow_mut().log_tt_hit(depth, depth, tt_score, tt_move);
             }
+
             return tt_score;
         }
 
-    
         if depth <= 0 {
             // Call quiescence search instead of static evaluation
             let eval = self.quiescence_search(board, alpha, beta);
             self.transposition_table.store(hash, depth, eval, None, NodeType::Exact);
             return eval;
         }
-    
+
         let mut moves = board.get_all_legal_moves();
         if moves.is_empty() {
             let eval = if board.is_in_check() { -MATE_SCORE } else { 0 };
             self.transposition_table.store(hash, depth, eval, None, NodeType::Exact);
             return eval;
         }
-    
-        self.order_moves(board, &mut moves);
-        
+
+        self.order_moves(board, &mut moves, depth);
         let original_alpha = alpha;
         let mut best_move = None;
-    
+        let mut best_score = -MATE_SCORE - 1; // For fail-soft
+
         for &mv in &moves {
             if let Ok(_) = board.try_make_move(mv) {
                 let score = -self.alphabeta(board, depth - 1, -beta, -alpha);
                 if let Err(_) = board.undo_move() { break; }
-                
-                if score > alpha {
-                    alpha = score;
+
+                // Fail-soft: update best_score regardless of alpha/beta bounds
+                if score > best_score {
+                    best_score = score;
                     best_move = Some(mv);
                 }
-                
+
+                if score > alpha {
+                    alpha = score;
+                }
+
                 if alpha >= beta {
                     // LOG: Beta cutoff
                     if let Some(logger) = &self.logger {
                         logger.borrow_mut().log_beta_cutoff(beta, score, mv);
                     }
-                    self.transposition_table.store(hash, depth, beta, best_move, NodeType::LowerBound);
-                    return beta;
+
+                    let to_piece = board.get_piece(mv.to);
+                    if engine::types::is_empty(to_piece) {
+                        self.store_killer_move(mv, depth);
+                    }
+
+                    // Fail-soft: return best_score instead of beta
+                    self.transposition_table.store(hash, depth, best_score, best_move, NodeType::LowerBound);
+                    return best_score;
                 }
-                
             }
         }
-        
+
         let node_type = if alpha <= original_alpha {
             NodeType::UpperBound
         } else {
             NodeType::Exact
         };
-        
-        self.transposition_table.store(hash, depth, alpha, best_move, node_type);
-        alpha
+
+        // Fail-soft: return best_score instead of alpha
+        self.transposition_table.store(hash, depth, best_score, best_move, node_type);
+        best_score
     }
-    
-    
-    fn order_moves(&self, board: &Board, moves: &mut Vec<Move>) {
+
+    fn order_moves(&self, board: &Board, moves: &mut Vec<Move>, depth: i32) {
         moves.sort_by_key(|&mv| {
             let from_piece = board.get_piece(mv.from);
             let to_piece = board.get_piece(mv.to);
-            
             let mut score = 0;
-            
-            // Captures: MVV-LVA (Most Valuable Victim - Least Valuable Attacker)
+
+            // 1. Hash move (handled separately in search - highest priority)
+
+            // 2. Captures: MVV-LVA (Most Valuable Victim - Least Valuable Attacker)
             if !engine::types::is_empty(to_piece) {
                 let victim_value = PIECE_VALUES[engine::types::piece_type(to_piece) as usize];
                 let attacker_value = PIECE_VALUES[engine::types::piece_type(from_piece) as usize];
-                score += 10000 + victim_value - attacker_value; // Higher score = better
+                score += 10000 + victim_value - attacker_value;
             }
-            
-            // Promotions
-            if engine::types::piece_type(from_piece) == engine::types::PAWN {
+            // 3. Promotions
+            else if engine::types::piece_type(from_piece) == engine::types::PAWN {
                 let from_rank = mv.from.rank();
                 let to_rank = mv.to.rank();
                 if (from_rank == 6 && to_rank == 7) || (from_rank == 1 && to_rank == 0) {
-                    score += 9000; // High priority for promotions
+                    score += 9000;
                 }
             }
-            
-            // TODO: Add check detection bonus later
-            
+            // 4. Killer moves (for non-captures)
+            else if depth >= 0 && depth < 128 {
+                let depth_idx = depth as usize;
+                if let Some(killer1) = self.killer_moves[depth_idx][0] {
+                    if killer1 == mv {
+                        score += 8000; // First killer gets higher priority
+                    }
+                }
+                if let Some(killer2) = self.killer_moves[depth_idx][1] {
+                    if killer2 == mv {
+                        score += 7000; // Second killer gets lower priority
+                    }
+                }
+            }
+
             -score // Negative because sort_by_key sorts ascending, we want descending
         });
     }
-    
+
     fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32) -> i32 {
         self.nodes_searched += 1;
-        
+
         // Stand pat - evaluate current position
         let stand_pat = evaluate_position(board);
         
+        // Fail-soft: we can return scores outside [alpha, beta]
         if stand_pat >= beta {
-            return beta;
+            return stand_pat; // Fail-soft: return actual score
         }
-        
+
         if stand_pat > alpha {
             alpha = stand_pat;
         }
-        
+
         // Get only capture moves
         let captures = self.get_capture_moves(board);
-        
+
         // Delta pruning - skip captures that can't improve position significantly
         let big_delta = 900; // Queen value - largest possible material gain
         if stand_pat + big_delta < alpha {
-            return alpha;
+            return stand_pat; // Fail-soft: return actual score
         }
-        
+
+        let mut best_score = stand_pat; // For fail-soft
+
         // Search captures
         for &mv in &captures {
             if let Ok(_) = board.try_make_move(mv) {
                 let score = -self.quiescence_search(board, -beta, -alpha);
                 if let Err(_) = board.undo_move() { break; }
-                
-                if score >= beta {
-                    return beta;
+
+                // Fail-soft: track best score
+                if score > best_score {
+                    best_score = score;
                 }
-                
+
+                if score >= beta {
+                    return score; // Fail-soft: return actual score
+                }
+
                 if score > alpha {
                     alpha = score;
                 }
             }
         }
-        
-        alpha
+
+        best_score // Fail-soft: return best score found
     }
-    
+
     fn get_capture_moves(&self, board: &Board) -> Vec<Move> {
         board.get_all_legal_moves()
             .into_iter()
@@ -236,9 +262,27 @@ impl SearchEngine {
             })
             .collect()
     }
-    
+
     pub fn set_logger(&mut self, logger: std::rc::Rc<std::cell::RefCell<engine::ChessLogger>>) {
         self.logger = Some(logger);
+    }
+
+    fn store_killer_move(&mut self, mv: Move, depth: i32) {
+        if depth < 0 || depth >= 128 {
+            return;
+        }
+
+        let depth_idx = depth as usize;
+        // Don't store if it's already the first killer
+        if let Some(first_killer) = self.killer_moves[depth_idx][0] {
+            if first_killer == mv {
+                return;
+            }
+        }
+
+        // Shift killers: second becomes first, new move becomes first
+        self.killer_moves[depth_idx][1] = self.killer_moves[depth_idx][0];
+        self.killer_moves[depth_idx][0] = Some(mv);
     }
 }
 

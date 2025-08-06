@@ -21,20 +21,18 @@ impl SearchEngine {
         }
     }
 
-    const MAX_EXTENSIONS: i32 = 1;
+    const MAX_EXTENSIONS: i32 = 1; // Reverted to conservative value to stabilize play
     const MAX_QS_DEPTH: i32 = 4;
 
-    /// Static Exchange Evaluation stub (simple placeholder - expand for full implementation)
+    /// Basic SEE (value-based estimate without full simulation)
     fn see(&self, board: &Board, mv: Move) -> i32 {
-        // TODO: Implement full SEE by simulating exchanges on mv.to
-        // For now, assume all are neutral (0) to avoid pruning everything
         let target_piece = board.get_piece(mv.to);
         if engine::types::is_empty(target_piece) {
-            return 0; // Quiet moves
+            return 0; // Quiet move
         }
         let victim_value = PIECE_VALUES[engine::types::piece_type(target_piece) as usize];
         let attacker_value = PIECE_VALUES[engine::types::piece_type(board.get_piece(mv.from)) as usize];
-        victim_value - attacker_value / 2 // Rough estimate
+        victim_value - attacker_value  // Simple net gain; positive if profitable
     }
 
     /// Calculates how many plies to extend the search based on the move and position
@@ -137,6 +135,11 @@ impl SearchEngine {
             return tt_score;
         }
 
+        // TODO: Implement repetition detection in Board (e.g., is_repetition(count))
+        // if board.is_repetition(2) {
+        //     return 0; // Draw score
+        // }
+
         // CRITICAL FIX: Never enter quiescence while in check
         let in_check = board.is_in_check();
         if depth <= 0 && !in_check {
@@ -148,7 +151,7 @@ impl SearchEngine {
 
         let mut moves = board.get_all_legal_moves();
         if moves.is_empty() {
-            let eval = if in_check { -MATE_SCORE } else { 0 };
+            let eval = if in_check { -MATE_SCORE } else { 0 }; // Simplified: No ply adjustment (reverted for stability)
             self.transposition_table.store(hash, depth, eval, None, NodeType::Exact);
             return eval;
         }
@@ -251,7 +254,7 @@ impl SearchEngine {
 
         let mut best_score = stand_pat;
 
-        for &mv in &tactical_moves {
+        for &mv in tactical_moves.iter() {
             if self.see(board, mv) < 0 {
                 continue; // Prune bad SEE
             }
